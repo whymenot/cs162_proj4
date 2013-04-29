@@ -32,6 +32,8 @@ package edu.berkeley.cs162;
 
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.Random;
 
 /** 
  * This is an generic class that should handle all TCP network connections 
@@ -39,11 +41,13 @@ import java.net.ServerSocket;
  * remains generic by providing the connection handling logic in a NetworkHandler
  */
 public class SocketServer {
+	//Fields
 	String hostname;
 	int port;
 	NetworkHandler handler;
 	ServerSocket server;
 	
+	//Constructors
 	public SocketServer(String hostname) {
 		this.hostname = hostname;
 		this.port = -1;
@@ -54,21 +58,24 @@ public class SocketServer {
 		this.port = port;
 	}
 	
+	//Helper Methods
+	public String getHostname() { return hostname; }
+	public int getPort() { return port; }
+	
+	//Action Methods
 	/**
 	 * Creates a ServerSocket. 
 	 * Uses 'port' if it is greater than zero, otherwise, selects a random port. 
 	 * @throws IOException
 	 */
 	public void connect() throws IOException {
-	      // TODO: implement me
-	}
-	
-	public String getHostname() {
-		return hostname;
-	}
-
-	public int getPort() {
-		return port;
+		if (this.port > 0)
+			this.server = new ServerSocket(this.port);
+		else {
+			Random random = new Random();
+			this.port = random.nextInt() + 1; // TODO: range of random int
+			this.server = new ServerSocket(this.port);
+		}
 	}
 
 	/**
@@ -76,7 +83,15 @@ public class SocketServer {
 	 * @throws IOException if there is a network error (for instance if the socket is inadvertently closed) 
 	 */
 	public void run() throws IOException {
-	      // TODO: implement me
+		if (this.handler == null) return;
+		
+		while (true) {
+			try {
+				Socket clientSocket = this.server.accept();
+				this.handler.handle(clientSocket);
+			}
+			catch (IOException e) { throw e; }
+		}
 	}
 	
 	/** 
@@ -91,11 +106,16 @@ public class SocketServer {
 	 * Stop the ServerSocket
 	 */
 	public void stop() {
-	      // TODO: implement me
+		finalize();
 	}
 	
 	private void closeSocket() {
-	     // TODO: implement me
+		try {
+			this.server.close();
+		}
+		catch (IOException e) {
+			//error message 
+		}
 	}
 	
 	protected void finalize(){
