@@ -38,6 +38,7 @@ import java.net.UnknownHostException;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.Map.Entry;
+import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
 public class TPCMaster {
@@ -152,6 +153,8 @@ public class TPCMaster {
 	
 	// new parameters
 	private TreeMap<Long, SlaveInfo> slaveServers;
+	private Lock getLock;
+	private static int numGetter = 0;
 	
 	/**
 	 * Creates TPCMaster
@@ -300,8 +303,6 @@ public class TPCMaster {
 	 */
 	public synchronized void performTPCOperation(KVMessage msg, boolean isPutReq) throws KVException {
 		AutoGrader.agPerformTPCOperationStarted(isPutReq);
-		// implement me
-		// cache -> masterCache
 		String key = msg.getKey();
 		
 		WriteLock writeLock = masterCache.getWriteLock(key);
@@ -420,12 +421,17 @@ public class TPCMaster {
 	 */
 	public String handleGet(KVMessage msg) throws KVException {
 		AutoGrader.aghandleGetStarted();
+
 		// implement me
 		String toReturn = null;
 		String key = msg.getKey();
-		
 		WriteLock writeLock = masterCache.getWriteLock(key);
-		writeLock.lock();
+		getLock.lock();
+		if (numGetter == 0)
+			writeLock.lock();
+		numGetter++;
+		getLock.unlock();
+		
 		
 		SlaveInfo first, second;
 		
@@ -472,7 +478,11 @@ public class TPCMaster {
 		} catch (KVException e) {
 			throw e;
 		} finally {
-			writeLock.unlock();
+			getLock.lock();
+			numGetter--;
+			if (numGetter == 0)
+				writeLock.unlock();
+			getLock.unlock();
 		}
 		
 		AutoGrader.aghandleGetFinished();
