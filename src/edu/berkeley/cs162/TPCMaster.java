@@ -277,12 +277,16 @@ public class TPCMaster {
 		try {
 			socket = si.connectHost();
 			msg.sendMessage(socket);
-			InputStream is = socket.getInputStream();
-			
-			response = new KVMessage(is);
+			try {
+				InputStream is = socket.getInputStream();
+				
+				response = new KVMessage(is);
+			} catch (Exception e) {
+				// IO error:
+			}
 
-		} catch (Exception e) {
-
+		} catch (KVException e) {
+			throw e;
 		} finally {
 			try {
 				if (socket != null) socket.close();
