@@ -328,89 +328,80 @@ public class TPCMaster {
 		request.setValue(msg.getValue());
 		request.setTpcOpId(nextTpcOpId);
 		
-		while(true) {
-			try {
-				// first phase
-				response = this.communicateToSlave(first, request);
-	
-				if (response.getMsgType().equals("abort")) {
+		try {
+			// first phase
+			response = this.communicateToSlave(first, request);
+
+			if (response.getMsgType().equals("abort")) {
+				while(true) {
+					try {
+						// second phase
+						request = new KVMessage("abort");
+						request.setTpcOpId(nextTpcOpId);
+						
+						response = this.communicateToSlave(first, request);
+					
+						if (response.getMsgType().equals("ack")) {
+							// ack received, exit
+							break;
+						}
+					} catch (KVException e) {
+						// retry...
+					}
+				}
+			}
+			else {
+				response = this.communicateToSlave(second, request);
+				
+				if (response.getMsgType().equals("abort")) { 
 					request = new KVMessage("abort");
-					request.setTpcOpId(nextTpcOpId);
-					while(true) {
-						try {
-							// second phase
+				} else {
+					request = new KVMessage("commit");
+				}
+				request.setTpcOpId(nextTpcOpId);
+				
+				boolean firstReceived = false;
+				boolean secondReceived = false;
+				while (true) {
+					try {
+						// second phase
+						if (!firstReceived) {
 							response = this.communicateToSlave(first, request);
 						
 							if (response.getMsgType().equals("ack")) {
-								// ack received, exit
-								break;
+								// ack received from first slave
+								firstReceived = true;
 							}
-						} catch (KVException e) {
-							
 						}
-					}
-				}
-				else {
-					while(true) {
-						try {
+						if (!secondReceived) {
 							response = this.communicateToSlave(second, request);
-							
-							if (response.getMsgType().equals("abort")) { 
-								request = new KVMessage("abort");
-							} else {
-								request = new KVMessage("commit");
+						
+							if (response.getMsgType().equals("ack")) {
+								// ack received from second slave
+								secondReceived = true;
 							}
-							request.setTpcOpId(nextTpcOpId);
-							
-							boolean firstReceived = false;
-							boolean secondReceived = false;
-							while (true) {
-								try {
-									// second phase
-									if (!firstReceived) {
-										response = this.communicateToSlave(first, request);
-									
-										if (response.getMsgType().equals("ack")) {
-											// ack received from first slave
-											firstReceived = true;
-										}
-									}
-									if (!secondReceived) {
-										response = this.communicateToSlave(second, request);
-									
-										if (response.getMsgType().equals("ack")) {
-											// ack received from second slave
-											secondReceived = true;
-										}
-									}
-									if (firstReceived && secondReceived) {
-										break;
-									}
-								} catch (KVException e) {
-									
-								}
-							}
-							
-							if (response.getMsgType().equals("commit")) {
-								if (isPutReq)
-									masterCache.put(key, msg.getValue());
-								else
-									masterCache.del(key);
-							}
-						} catch (KVException e) {
-							
 						}
-						break;
+						if (firstReceived && secondReceived) {
+							break;
+						}
+					} catch (KVException e) {
+						// retry...
 					}
 				}
-			} catch (KVException e) {
-				// repeat until it succeeds
-				continue;
-			} finally {
-				writeLock.unlock();
+				
+				if (response.getMsgType().equals("commit")) {
+					if (isPutReq)
+						masterCache.put(key, msg.getValue());
+					else
+						masterCache.del(key);
+				}
 			}
-			break;
+		} catch (KVException e) {
+			throw e;
+		} finally {
+			writeLock.unlock();
 		}
+		
 		AutoGrader.agPerformTPCOperationFinished(isPutReq);
 		return;
 	}
