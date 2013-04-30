@@ -465,7 +465,9 @@ public class TPCMaster {
 		} catch (IOException e) {
 			throw new KVException(new KVMessage("resp", "IgnoreNext Error: SlaveServer SlaveServerID has ignored this 2PC request during the first phase"));
 		} catch (KVException e) {
-			
+			throw e;
+		} finally {
+			writeLock.unlock();
 		}
 		
 		AutoGrader.aghandleGetFinished();
