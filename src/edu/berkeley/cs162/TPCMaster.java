@@ -118,11 +118,20 @@ public class TPCMaster {
 		
 		public Socket connectHost() throws KVException {
 		    // TODO: Optional Implement Me!
-			return null;
+			try {
+				return new Socket(this.hostName, this.port);
+			} catch (Exception e) {
+				return null;
+			}
 		}
 		
 		public void closeHost(Socket sock) throws KVException {
 		    // TODO: Optional Implement Me!
+			try {
+				sock.close();
+			} catch (Exception e) {
+				// do nothing
+			}
 		}
 	}
 	
@@ -259,6 +268,28 @@ public class TPCMaster {
 		}
 	}
 	
+	public KVMessage communicateToSlave(SlaveInfo si, KVMessage msg) throws KVException {
+		KVMessage response = null;
+		Socket socket = null;
+		try {
+			socket = si.connectHost();
+			msg.sendMessage(socket);
+			InputStream is = socket.getInputStream();
+			
+			response = new KVMessage(is);
+
+		} catch (Exception e) {
+
+		} finally {
+			try {
+				if (socket != null) socket.close();
+			} catch (Exception e) {
+				// do nothing
+			}
+		}
+		return response;
+	}
+	
 	/**
 	 * Synchronized method to perform 2PC operations one after another
 	 * You will need to remove the synchronized declaration if you wish to attempt the extra credit
@@ -293,99 +324,92 @@ public class TPCMaster {
 		
 		String nextTpcOpId = this.getNextTpcOpId();
 		
-		InputStream is;
-		
 		request.setKey(key);
 		request.setValue(msg.getValue());
 		request.setTpcOpId(nextTpcOpId);
 		
-		try {
-			Socket firstSocket = first.connectHost();
-			Socket secondSocket = second.connectHost();
-			// first phase
-			request.sendMessage(firstSocket, TIMEOUT_MILLISECONDS);
-		
-			is = firstSocket.getInputStream();
-			
-			response = new KVMessage(is);
-			
-			if (response.getMsgType().equals("abort")) {
-				while(true) {
-					// second phase
+		while(true) {
+			try {
+				// first phase
+				response = this.communicateToSlave(first, request);
+	
+				if (response.getMsgType().equals("abort")) {
 					request = new KVMessage("abort");
 					request.setTpcOpId(nextTpcOpId);
-					request.sendMessage(firstSocket, TIMEOUT_MILLISECONDS);
-					
-					response = new KVMessage(is);
-					
-					if (response.getMsgType().equals("ack")) {
-						// ack received, exit
+					while(true) {
+						try {
+							// second phase
+							response = this.communicateToSlave(first, request);
+						
+							if (response.getMsgType().equals("ack")) {
+								// ack received, exit
+								break;
+							}
+						} catch (KVException e) {
+							
+						}
+					}
+				}
+				else {
+					while(true) {
+						try {
+							response = this.communicateToSlave(second, request);
+							
+							if (response.getMsgType().equals("abort")) { 
+								request = new KVMessage("abort");
+							} else {
+								request = new KVMessage("commit");
+							}
+							request.setTpcOpId(nextTpcOpId);
+							
+							boolean firstReceived = false;
+							boolean secondReceived = false;
+							while (true) {
+								try {
+									// second phase
+									if (!firstReceived) {
+										response = this.communicateToSlave(first, request);
+									
+										if (response.getMsgType().equals("ack")) {
+											// ack received from first slave
+											firstReceived = true;
+										}
+									}
+									if (!secondReceived) {
+										response = this.communicateToSlave(second, request);
+									
+										if (response.getMsgType().equals("ack")) {
+											// ack received from second slave
+											secondReceived = true;
+										}
+									}
+									if (firstReceived && secondReceived) {
+										break;
+									}
+								} catch (KVException e) {
+									
+								}
+							}
+							
+							if (response.getMsgType().equals("commit")) {
+								if (isPutReq)
+									masterCache.put(key, msg.getValue());
+								else
+									masterCache.del(key);
+							}
+						} catch (KVException e) {
+							
+						}
 						break;
 					}
 				}
+			} catch (KVException e) {
+				// repeat until it succeeds
+				continue;
+			} finally {
+				writeLock.unlock();
 			}
-			else {
-				request.sendMessage(secondSocket, TIMEOUT_MILLISECONDS);
-				
-				is = secondSocket.getInputStream();
-				
-				response = new KVMessage(is);
-				
-				if (response.getMsgType().equals("abort")) { 
-					request = new KVMessage("abort");
-				} else {
-					request = new KVMessage("commit");
-				}
-				request.setTpcOpId(nextTpcOpId);
-				
-				boolean firstReceived = false;
-				boolean secondReceived = false;
-				while (true) {
-					// second phase
-					if (!firstReceived) {
-						request.sendMessage(firstSocket, TIMEOUT_MILLISECONDS);
-					
-						is = firstSocket.getInputStream();
-						response = new KVMessage(is);
-					
-						if (response.getMsgType().equals("ack")) {
-							// ack received from first slave
-							firstReceived = true;
-						}
-					}
-					if (!secondReceived) {
-						request.sendMessage(secondSocket, TIMEOUT_MILLISECONDS);
-					
-						is = secondSocket.getInputStream();
-						response = new KVMessage(is);
-					
-						if (response.getMsgType().equals("ack")) {
-							// ack received from second slave
-							secondReceived = true;
-						}
-					}
-					if (firstReceived && secondReceived) {
-						break;
-					}
-				}
-				
-				if (response.getMsgType().equals("commit")) {
-					if (isPutReq)
-						masterCache.put(key, msg.getValue());
-					else
-						masterCache.del(key);
-				}
-			}
-			
-			// close sockets
-			firstSocket.close();
-			secondSocket.close();
-		} catch (IOException e) {
-			throw new KVException(new KVMessage("resp", "IgnoreNext Error: SlaveServer SlaveServerID has ignored this 2PC request during the first phase"));
-		} catch (KVException e) {
-			throw e;
-		} finally {
-			writeLock.unlock();
+			break;
 		}
 		AutoGrader.agPerformTPCOperationFinished(isPutReq);
 		return;
@@ -420,50 +444,40 @@ public class TPCMaster {
 		KVMessage request, response;
 		
 		request = new KVMessage("getreq");
-		
-		InputStream is;
-		
 		request.setKey(key);
 		
 		try {
 			if (masterCache.get(key) != null) {
 				toReturn = masterCache.get(key);
 			} else {
-				Socket firstSocket = first.connectHost();
-				Socket secondSocket = second.connectHost();
-				request.sendMessage(firstSocket, TIMEOUT_MILLISECONDS);
+				String error1 = null;
+				String error2 = null;
+				response = this.communicateToSlave(first, request);
 				
-				is = firstSocket.getInputStream();
-				
-				response = new KVMessage(is);
-				
-				if (response.getMsgType().equals("resp") && response.getKey().equals(key) && response.getValue() != null) {
+				if (response.getMsgType().equals("resp") &&
+						response.getKey() != null && response.getKey().equals(key) &&
+						response.getValue() != null) {
 					// if the first slave has the value
 					toReturn = response.getValue();
 				}
 				else {
+					error1 = response.getMessage();
 					// try second slave
-					request.sendMessage(secondSocket, TIMEOUT_MILLISECONDS);
+					response = this.communicateToSlave(second, request);
 					
-					is = secondSocket.getInputStream();
-					
-					response = new KVMessage(is);
-					
-					if (response.getMsgType().equals("resp") && response.getKey().equals(key) && response.getValue() != null) {
+					if (response.getMsgType().equals("resp") &&
+							response.getKey() != null && response.getKey().equals(key) &&
+							response.getValue() != null) {
 						// if the second slave has the value
 						toReturn = response.getValue();
 					}
 					else {
+						error2 = response.getMessage();
 						// neither of the two slaves has the value
-						throw new KVException(new KVMessage("resp", "IgnoreNext Error: SlaveServer SlaveServerID has ignored this 2PC request during the first phase")); 
+						throw new KVException(new KVMessage("resp", "@" + first.getSlaveID() + ":=" + error1 + "\n@" + second.getSlaveID() + ":=" + error2)); 
 					}
 				}
-				// close sockets
-				firstSocket.close();
-				secondSocket.close();
 			}
-		} catch (IOException e) {
-			throw new KVException(new KVMessage("resp", "IgnoreNext Error: SlaveServer SlaveServerID has ignored this 2PC request during the first phase"));
 		} catch (KVException e) {
 			throw e;
 		} finally {
