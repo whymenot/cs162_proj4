@@ -31,8 +31,13 @@
  */
 package edu.berkeley.cs162;
 
+import edu.berkeley.cs162.KVMessage;
+
 import java.net.Socket;
 
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.IOException;
 
 /**
  * This class is used to communicate with (appropriately marshalling and unmarshalling) 
@@ -40,10 +45,11 @@ import java.net.Socket;
  *
  */
 public class KVClient implements KeyValueInterface {
-
+	//Fields
 	private String server = null;
 	private int port = 0;
 	
+	//Constructor
 	/**
 	 * @param server is the DNS reference to the Key-Value server
 	 * @param port is the port on which the Key-Value server is listening
@@ -53,29 +59,113 @@ public class KVClient implements KeyValueInterface {
 		this.port = port;
 	}
 	
+	//Helper Methods
+	public String getServer() { return this.server; }
+	public int getPort() { return this.port; }
+	
+	//Action Methods
 	private Socket connectHost() throws KVException {
-	    // TODO: Implement Me!  
-		return null;
+		Socket socket;
+		try {
+			socket = new Socket(this.server, this.port);
+		}
+		catch (Exception e) { throw new KVException(new KVMessage("resp", "Network Error: Could not create socket")); }
+		return socket;
 	}
 	
-	private void closeHost(Socket sock) throws KVException {
-	    // TODO: Implement Me!
+	private void closeHost(Socket socket) throws KVException {
+	    try {
+	    	socket.close();
+	    }
+	    catch (Exception e) { throw new KVException(new KVMessage("resp", "Unknown Error: Could not close socket")); }
 	}
 	
 	public void put(String key, String value) throws KVException {
-	    // TODO: Implement Me from Project 3
-	    return;
+	    if (key.length() > 256)
+	    	throw new KVException(new KVMessage("resp", "Oversized key"));
+	    if (value.length() > 256*1024)
+	    	throw new KVException(new KVMessage("resp", "Oversized value"));
+	    
+	    Socket socket = connectHost();
+	    
+	    KVMessage request = null;
+	    KVMessage response = null;
+	    InputStream is = null;
+	    
+	    request = new KVMessage("putreq");
+	    request.setKey(key);
+	    request.setValue(value);
+	    request.sendMessage(socket);
+	    
+	    try {
+	    	is = socket.getInputStream();
+	    }
+	    catch (IOException e){ throw new KVException(new KVMessage("resp", "Network Error: Could not receive data")); }
+	    
+	    response = new KVMessage(is);
+	    
+	    if (response.getMessage().equals("Success")) {
+            closeHost(socket);
+        }
+	    throw new KVException(response);
 	}
 
+
 	public String get(String key) throws KVException {
-		// TODO: Implement Me from Project 3
-	    return null;
+		if (key.length() > 256)
+	    	throw new KVException(new KVMessage("resp", "Oversized key"));
+		
+		Socket socket = connectHost();
+		
+	    String value = null;
+	    KVMessage request = null;
+	    KVMessage response = null;
+	    InputStream is = null;
+	    
+	    request = new KVMessage("getreq");
+	    request.setKey(key);
+	    request.sendMessage(socket);
+	    
+	    try {
+	    	is = socket.getInputStream();
+	    }
+	    catch (IOException e) { throw new KVException(new KVMessage("resp", "Network Error: Could not receive data")); }
+	    
+	    response = new KVMessage(is);
+	    value = response.getValue();
+	    if (value != null) {
+            closeHost(socket);
+	    	return value;
+        }
+	    throw new KVException(response);
 	}
 	
 	public void del(String key) throws KVException {
-		// TODO: Implement Me from Project 3
-		return;
-	}	
+		if (key.length() > 256)
+	    	throw new KVException(new KVMessage("resp", "Oversized value"));
+		
+		Socket socket = connectHost();
+		
+		KVMessage request = null;
+		KVMessage response = null;
+		InputStream is = null;
+		
+		request = new KVMessage("delreq");
+		request.setKey(key);
+		request.sendMessage(socket);
+		
+		try {
+			is = socket.getInputStream();
+		}
+	    catch (IOException e) { throw new KVException(new KVMessage("resp", "Network Error: Could not receive data")); }
+		
+		response = new KVMessage(is);
+		if (response.getMessage().equals("Success")) {
+            closeHost(socket);
+			return;
+        }
+		throw new KVException(response);
+	}
 	
 	public void ignoreNext() throws KVException {
 	    // TODO: Implement Me!

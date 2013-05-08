@@ -31,10 +31,15 @@
 package edu.berkeley.cs162;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.Map.Entry;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
 public class TPCMaster {
 	
@@ -112,6 +117,17 @@ public class TPCMaster {
 		 */
 		public SlaveInfo(String slaveInfo) throws KVException {
 			// implement me
+			try {
+				String splitted1[] = slaveInfo.split("@");
+				String splitted2[] = splitted1[1].split(":");
+				
+				this.slaveID = hashTo64bit(splitted1[0]);
+				this.hostName = splitted2[0];
+				this.port = Integer.parseInt(splitted2[1]);
+				
+			} catch (Exception e) {
+				throw new KVException(new KVMessage("resp", "Registration Error: Received unparseable slave information"));
+			}
 		}
 		
 		public long getSlaveID() {
@@ -120,11 +136,20 @@ public class TPCMaster {
 		
 		public Socket connectHost() throws KVException {
 		    // TODO: Optional Implement Me!
-			return null;
+			try {
+				return new Socket(this.hostName, this.port);
+			} catch (Exception e) {
+				return null;
+			}
 		}
 		
 		public void closeHost(Socket sock) throws KVException {
 		    // TODO: Optional Implement Me!
+			try {
+				sock.close();
+			} catch (Exception e) {
+				// do nothing
+			}
 		}
 	}
 	
@@ -142,6 +167,11 @@ public class TPCMaster {
 	
 	// ID of the next 2PC operation
 	private Long tpcOpId = 0L;
+	
+	// new parameters
+	private TreeMap<Long, SlaveInfo> slaveServers;
+	private Lock getLock;
+	private static int numGetter = 0;
 	
 	/**
 	 * Creates TPCMaster
@@ -174,6 +204,21 @@ public class TPCMaster {
 	public void run() {
 		AutoGrader.agTPCMasterStarted();
 		// implement me
+		Thread thread = new Thread(new Runnable() {
+			@Override
+			public void run(){
+				try {
+					regServer.connect();
+					regServer.run();
+				} catch (IOException e) {
+					// do nothing
+				}
+			}
+		});
+		
+		// start the registration thread
+		thread.start();
+		
 		AutoGrader.agTPCMasterFinished();
 	}
 	
@@ -220,7 +265,12 @@ public class TPCMaster {
 		long hashedKey = hashTo64bit(key.toString());
 
 		// implement me
-		return null;
+		Entry<Long, SlaveInfo> entry = slaveServers.higherEntry(hashedKey);
+		if (entry == null) {
+			return slaveServers.firstEntry().getValue();
+		} else {
+			return entry.getValue();
+		}
 	}
 	
 	/**
@@ -230,7 +280,38 @@ public class TPCMaster {
 	 */
 	private SlaveInfo findSuccessor(SlaveInfo firstReplica) {
 		// implement me
-		return null;
+		Entry<Long, SlaveInfo> entry = slaveServers.higherEntry(firstReplica.getSlaveID());
+		if (entry == null) {
+			return slaveServers.firstEntry().getValue();
+		} else {
+			return entry.getValue();
+		}
+	}
+	
+	public KVMessage communicateToSlave(SlaveInfo si, KVMessage msg) throws KVException {
+		KVMessage response = null;
+		Socket socket = null;
+		try {
+			socket = si.connectHost();
+			msg.sendMessage(socket);
+			try {
+				InputStream is = socket.getInputStream();
+				
+				response = new KVMessage(is);
+			} catch (Exception e) {
+				// IO error:
+			}
+
+		} catch (KVException e) {
+			throw e;
+		} finally {
+			try {
+				if (socket != null) socket.close();
+			} catch (Exception e) {
+				// do nothing
+			}
+		}
+		return response;
 	}
 	
 	/**
@@ -243,7 +324,106 @@ public class TPCMaster {
 	 */
 	public synchronized void performTPCOperation(KVMessage msg, boolean isPutReq) throws KVException {
 		AutoGrader.agPerformTPCOperationStarted(isPutReq);
-		// implement me
+		String key = msg.getKey();
+		
+		WriteLock writeLock = masterCache.getWriteLock(key);
+		writeLock.lock();
+		
+		SlaveInfo first, second;
+		
+		first = this.findFirstReplica(key);
+		second = this.findSuccessor(first);
+		
+		KVMessage request, response;
+		
+		if (isPutReq) {
+			// set put operation
+			request = new KVMessage("putreq");
+		} else {
+			// set del operation
+			request = new KVMessage("delreq");
+		}
+		
+		String nextTpcOpId = this.getNextTpcOpId();
+		
+		request.setKey(key);
+		request.setValue(msg.getValue());
+		request.setTpcOpId(nextTpcOpId);
+		
+		try {
+			// first phase
+			response = this.communicateToSlave(first, request);
+
+			if (response.getMsgType().equals("abort")) {
+				while(true) {
+					try {
+						// second phase
+						request = new KVMessage("abort");
+						request.setTpcOpId(nextTpcOpId);
+						
+						response = this.communicateToSlave(first, request);
+					
+						if (response.getMsgType().equals("ack")) {
+							// ack received, exit
+							break;
+						}
+					} catch (KVException e) {
+						// retry...
+					}
+				}
+			}
+			else {
+				response = this.communicateToSlave(second, request);
+				
+				if (response.getMsgType().equals("abort")) { 
+					request = new KVMessage("abort");
+				} else {
+					request = new KVMessage("commit");
+				}
+				request.setTpcOpId(nextTpcOpId);
+				
+				boolean firstReceived = false;
+				boolean secondReceived = false;
+				while (true) {
+					try {
+						// second phase
+						if (!firstReceived) {
+							response = this.communicateToSlave(first, request);
+						
+							if (response.getMsgType().equals("ack")) {
+								// ack received from first slave
+								firstReceived = true;
+							}
+						}
+						if (!secondReceived) {
+							response = this.communicateToSlave(second, request);
+						
+							if (response.getMsgType().equals("ack")) {
+								// ack received from second slave
+								secondReceived = true;
+							}
+						}
+						if (firstReceived && secondReceived) {
+							break;
+						}
+					} catch (KVException e) {
+						// retry...
+					}
+				}
+				
+				if (response.getMsgType().equals("commit")) {
+					if (isPutReq)
+						masterCache.put(key, msg.getValue());
+					else
+						masterCache.del(key);
+				}
+			}
+		} catch (KVException e) {
+			throw e;
+		} finally {
+			writeLock.unlock();
+		}
+		
 		AutoGrader.agPerformTPCOperationFinished(isPutReq);
 		return;
 	}
@@ -262,8 +442,71 @@ public class TPCMaster {
 	 */
 	public String handleGet(KVMessage msg) throws KVException {
 		AutoGrader.aghandleGetStarted();
+
 		// implement me
+		String toReturn = null;
+		String key = msg.getKey();
+		WriteLock writeLock = masterCache.getWriteLock(key);
+		getLock.lock();
+		if (numGetter == 0)
+			writeLock.lock();
+		numGetter++;
+		getLock.unlock();
+		
+		
+		SlaveInfo first, second;
+		
+		first = this.findFirstReplica(key);
+		second = this.findSuccessor(first);
+		
+		KVMessage request, response;
+		
+		request = new KVMessage("getreq");
+		request.setKey(key);
+		
+		try {
+			if (masterCache.get(key) != null) {
+				toReturn = masterCache.get(key);
+			} else {
+				String error1 = null;
+				String error2 = null;
+				response = this.communicateToSlave(first, request);
+				
+				if (response.getMsgType().equals("resp") &&
+						response.getKey() != null && response.getKey().equals(key) &&
+						response.getValue() != null) {
+					// if the first slave has the value
+					toReturn = response.getValue();
+				}
+				else {
+					error1 = response.getMessage();
+					// try second slave
+					response = this.communicateToSlave(second, request);
+					
+					if (response.getMsgType().equals("resp") &&
+							response.getKey() != null && response.getKey().equals(key) &&
+							response.getValue() != null) {
+						// if the second slave has the value
+						toReturn = response.getValue();
+					}
+					else {
+						error2 = response.getMessage();
+						// neither of the two slaves has the value
+						throw new KVException(new KVMessage("resp", "@" + first.getSlaveID() + ":=" + error1 + "\n@" + second.getSlaveID() + ":=" + error2)); 
+					}
+				}
+			}
+		} catch (KVException e) {
+			throw e;
+		} finally {
+			getLock.lock();
+			numGetter--;
+			if (numGetter == 0)
+				writeLock.unlock();
+			getLock.unlock();
+		}
+		
 		AutoGrader.aghandleGetFinished();
-		return null;
+		return toReturn;
 	}
 }

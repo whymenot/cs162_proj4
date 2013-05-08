@@ -31,6 +31,7 @@
 package edu.berkeley.cs162;
 
 import edu.berkeley.cs162.KVException;
+
 import java.io.FilterInputStream;
 import java.io.InputStream;
 import java.io.Serializable;
@@ -71,7 +72,7 @@ public class KVMessage implements Serializable {
 	private String value = null;
 	private String message = null;
     private String tpcOpId = null;    
-
+	
 	//Constructors
 	/**
 	 * @param msgType
@@ -356,15 +357,10 @@ public class KVMessage implements Serializable {
 			Transformer transformer = transformerFactory.newTransformer();
 			transformer.transform(domSource, streamResult);
 			String xmlString = stringWriter.toString();
-			
 			return xmlString;
 		}
-		catch (KVException e) {
-			throw e;
-		}
-		catch (Exception e) {
-			e.getStackTrace();
-		}
+		catch (KVException e) { throw e; }
+		catch (Exception e) { e.getStackTrace(); }
 		return null;
 	}
 	
@@ -374,29 +370,19 @@ public class KVMessage implements Serializable {
 			OutputStream os = socket.getOutputStream();
 			os.write(xml.getBytes(), 0, xml.length());
 		}
-		catch (IOException e) {
-			throw new KVException(new KVMessage("resp", "Network Error: Could not send data"));
-		}
-		catch (KVException e) {
-			throw e;
-		}
-		catch (Exception e) {
-			throw new KVException(new KVMessage("resp", "Unknown Error: " + e.getLocalizedMessage()));
-		}
+		catch (IOException e) { throw new KVException(new KVMessage("resp", "Network Error: Could not send data")); }
+		catch (KVException e) { throw e; }
+		catch (Exception e) { throw new KVException(new KVMessage("resp", "Unknown Error: " + e.getLocalizedMessage())); }
 		
 		try {
 			socket.getOutputStream().flush();
 		}
-		catch (IOException e) {
-			throw new KVException(new KVMessage("resp", "Unknown Error: Socket is not connected"));
-		}
+		catch (IOException e) { throw new KVException(new KVMessage("resp", "Unknown Error: Socket is not connected")); }
 		
 		try {
-	    	socket.shutdownOutput();
-	    }
-	    catch (IOException e) {
-	    	throw new KVException(new KVMessage("resp", "Unknown Error: " + e.getLocalizedMessage()));
-	    }
+			socket.shutdownOutput();
+		}
+	    catch (IOException e) { throw new KVException(new KVMessage("resp", "Unknown Error: " + e.getLocalizedMessage())); }
 	}
 	
 	public void sendMessage(Socket socket, int timeout) throws KVException {
