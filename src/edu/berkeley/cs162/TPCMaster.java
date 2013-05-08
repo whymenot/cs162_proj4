@@ -41,7 +41,6 @@ public class TPCMaster {
 	/**
 	 * Implements NetworkHandler to handle registration requests from 
 	 * SlaveServers.
-	 * 
 	 */
 	private class TPCRegistrationHandler implements NetworkHandler {
 
@@ -49,7 +48,7 @@ public class TPCMaster {
 
 		public TPCRegistrationHandler() {
 			// Call the other constructor
-			this(1);	
+			this(1);
 		}
 
 		public TPCRegistrationHandler(int connections) {
@@ -59,26 +58,44 @@ public class TPCMaster {
 		@Override
 		public void handle(Socket client) throws IOException {
 			// implement me
+            RegistrationHandler regHandler = new RegistrationHandler(client);
+            regHandler.run();
 		}
 		
 		private class RegistrationHandler implements Runnable {
-			
+			//Fields
 			private Socket client = null;
-
+            
+            //Constructor
 			public RegistrationHandler(Socket client) {
 				this.client = client;
 			}
-
+            
+            //Methods
 			@Override
 			public void run() {
 				// implement me
+                request = new KVMessage(client.getInputStream());
+                if (request.getMsgType().equals("register"))
+                    reply = registerReq(request);
+                else
+                    throw new IllegalArgumentException();
+
+                reply.sendMessage(client);
 			}
+
+            public KVMessage registerReq(KVMessage request) throws KVException {
+                slaveInfo = new SlaveInfo(request.getMessage());
+                if (slaves.containsKey(slaveInfo.slaveID))
+                    return new KVMessage("resp", "Fail");
+                slaves.put(slaveInfo.slaveID, slaveInfo);
+                return new KVMessage("resp", "Success");
+            }
 		}	
 	}
 	
 	/**
 	 *  Data structure to maintain information about SlaveServers
-	 *
 	 */
 	private class SlaveInfo {
 		// 64-bit globally unique ID of the SlaveServer

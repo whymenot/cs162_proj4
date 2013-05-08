@@ -74,6 +74,8 @@ public class TPCLog {
 	
 	public void appendAndFlush(KVMessage entry) {
 		// implement me
+        entries.add(entry);
+        flushToDisk();
 	}
 
 	/**
@@ -135,6 +137,36 @@ public class TPCLog {
 	 */
 	public void rebuildKeyServer() throws KVException {
 		// implement me
+        loadFromDisk();
+        boolean ignore = false;
+        int i = 0;
+        while (i < entries.size()) {
+            KVMessage operation = entries.get(i);
+            if (operation is ignoreNext) {
+                ignore = !ignore;
+                i+=2;
+            }
+            else if (ignore == true) {
+                i += 4;
+                ignore = false;
+            }
+            else if (i + 3 >= entries.size()) {
+                interruptedTpcOperation = operation;
+                i = entries.size();
+            }
+            else {
+                KVMessage response = entries.get(i+1);
+                KVMessage decision = entries.get(i+2);
+                KVMessage ack = entries.get(i+3);
+                i += 4;
+                if (decision is commit) {
+                    if (operation is put)
+                        kvServer.put(operation.getKey(), operation.getValue());
+                    else if (operation is del)
+                        kvServer.del(operation.getKey());
+                }
+            }
+        }
 	}
 	
 	/**

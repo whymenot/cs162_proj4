@@ -30,19 +30,18 @@
  */
 package edu.berkeley.cs162;
 
+import edu.berkeley.cs162.KVException;
 import java.io.FilterInputStream;
 import java.io.InputStream;
 import java.io.Serializable;
-import java.net.Socket;
-
-/** Part I */
-import edu.berkeley.cs162.KVException;
-
 import java.io.OutputStream;
 import java.io.StringWriter;
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+
+import java.net.Socket;
+import java.net.SocketException;
 
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -58,7 +57,6 @@ import javax.xml.transform.dom.*;
 import javax.xml.transform.stream.*;
 
 import org.xml.sax.SAXException;
-/** Part I END */
 
 
 /**
@@ -73,66 +71,24 @@ public class KVMessage implements Serializable {
 	private String value = null;
 	private String message = null;
     private String tpcOpId = null;    
-	
-	//Helper Methods
-	public final String getMsgType() { return msgType; }
-	public final String getKey() { return key; }
-	public final String getValue() { return value; }
-	public final String getStatus() { return status; }
-	public final String getMessage() { return message; }
-	public final String getTpcOpId() { return tpcOpId; }
-
-    public final void setMsgType(String msgType) { this.msgType = msgType; }
-	public final void setKey(String key) { this.key = key; }
-	public final void setValue(String value) { this.value = value; }
-	public final void setStatus(String status) { this.status = status; }
-	public final void setMessage(String message) { this.message = message; }
-	public final void setTpcOpId(String tpcOpId) { this.tpcOpId = tpcOpId; }
-
-	/** Part I */
-	private boolean validMsgType(String msgType) {
-		if (msgType.equals("getreq") ||
-            msgType.equals("putreq") ||
-            msgType.equals("delreq") ||
-            msgType.equals("resp") ||
-            msgType.equals("ready") ||
-            msgType.equals("abort") ||
-            msgType.equals("commit/abort") ||
-            msgType.equals("ack") ||
-            msgType.equals("register") ||
-            msgType.equals("ignoreNext"))
-			return true;
-		else
-			return false;
-	}
 
 	//Constructors
-	/***
-	 * 
+	/**
 	 * @param msgType
 	 * @throws KVException of type "resp" with message "Message format incorrect" if msgType is unknown
 	 */
-	public KVMessage(String msgType) throws KVException {
-		if (validMsgType(msgType) == false)
-			throw new KVException(new KVMessage("resp", "Message format incorrect"));
-		else
-			this.msgType = msgType;
-	}
+    public KVMessage(String msgType) throws KVException {
+        this.msgType = this.validMsgType(msgType);
+    }
 	
-	public KVMessage(String msgType, String message) throws KVException {
-		if (validMsgType(msgType) == false)
-			throw new KVException(new KVMessage("resp", "Message format incorrect"));
-		else if (message == null || message.length()==0)
-			throw new KVException(new KVMessage("resp", "Message format incorrect"));
-		else {
-			this.msgType = msgType;
-			this.message = message;
-		}
-	}
+    public KVMessage(String msgType, String message) throws KVException {
+        this.msgType = this.validMsgType(msgType);
+        this.message = message;
+    }
 	
-	 /***
+    /**
      * Parse KVMessage from incoming network connection
-     * @param sock
+     * @param input
      * @throws KVException if there is an error in parsing the message. The exception should be of type "resp and message should be :
      * a. "XML Error: Received unparseable message" - if the received message is not valid XML.
      * b. "Network Error: Could not receive data" - if there is a network error causing an incomplete parsing of the message.
@@ -146,133 +102,59 @@ public class KVMessage implements Serializable {
 
 			Element root = doc.getDocumentElement();
 			root.normalize();
-			
-			if (!root.getNodeName().equals("KVMessage"))
-				throw new KVException(new KVMessage("resp", "Message format incorrect"));
 
 			this.msgType = root.getAttribute("type");
-			NodeList keyList = root.getElementsByTagName("Key");
+			NodeList keyList = root.getElementsByTagName("Key"); //null if there is no such tag
 			NodeList valueList = root.getElementsByTagName("Value");
 			NodeList messageList = root.getElementsByTagName("Message");
             NodeList tpcOpIdList = root.getElementsByTagName("TPCOpId");
 
-			if (keyList.getLength()>1 || valueList.getLength()>1 || messageList.getLength()>1 || tpcOpIdList.getLength()>1)
-				throw new KVException(new KVMessage("resp", "Message format incorrect"));
-			
-			if (this.msgType.equals("getreq")) {
-				if (keyList.getLength()==0)
-					throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                
-                String key = keyList.item(0).getTextContent();
-                if (key==null || key.length()==0)
-                    throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                this.key = key;
-                // TODO
+            switch (this.msgType) {
+                case "getreq":
+                    this.key = this.validNodeList(keyList);
+                    break;
+                case "putreq":
+                    this.key = this.validNodeList(keyList);
+                    this.value = this.validNodeList(valueList);
+                    if (tpcOpIdList.getLength()==1)
+                        this.tpcOpId = this.validNodeList(tpcOpIdList);
+                    break;
+                case "delreq":
+                    this.key = this.validNodeList(keyList);
+                    if (tpcOpIdList.getLength()==1)
+                        this.tpcOpId = this.validNodeList(tpcOpIdList);
+                    break;
+                case "resp":
+                    if (messageList.getLength() == 0) {
+                        this.key = this.validNodeList(keyList);
+                        this.value = this.validNodeList(valueList);
+                    }
+                    else
+                        this.message = this.validNodeList(messageList);
+                    break;
+                case "abort":
+                	if (messageList.getLength()==1)
+                        this.message = this.validNodeList(messageList);
+                    this.tpcOpId = this.validNodeList(tpcOpIdList);
+                    break;
+                case "commit":
+                    this.tpcOpId = this.validNodeList(tpcOpIdList);
+                    break;
+                case "ready":
+                    this.tpcOpId = this.validNodeList(tpcOpIdList);
+                    break;
+                case "ack":
+                    this.tpcOpId = this.validNodeList(tpcOpIdList);
+                    break;
+                case "register":
+                    this.message = this.validNodeList(messageList);
+                    break;
+                case "ignoreNext":
+                    // TODO
+                    break;
+                default:
+				    throw new KVException(new KVMessage("resp", "Message format incorrect"));
 			}
-			else if (this.msgType.equals("putreq")) {
-				if (keyList.getLength()==0 || valueList.getLength()==0 || tpcOpIdList.getLength()==0)
-					throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                
-                String key = keyList.item(0).getTextContent();
-                String value = valueList.item(0).getTextContent();
-                String tpcOpId = tpcOpIdList.item(0).getTextContent();
-                if (key==null || key.length()==0 || value==null || value.length()==0 || tpcOpId==null || tpcOpId.length()==0)
-                    throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                this.key = key;
-                this.value = value;
-                this.tpcOpId = tpcOpId;
-			}
-			else if (this.msgType.equals("delreq")) {
-				if (keyList.getLength()==0 || tpcOpIdList.getLength()==0)
-					throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                
-                String key = keyList.item(0).getTextContent();
-                String tpcOpId = tpcOpIdList.item(0).getTextContent();
-                if (key==null || key.length()==0 || tpcOpId==null || tpcOpId.length()==0)
-                    throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                this.key = key;
-                this.tpcOpId = tpcOpId;
-			}
-			else if (this.msgType.equals("resp")) {
-				if (messageList.getLength() == 0) {
-					if (keyList.getLength() == 0 || valueList.getLength() == 0)
-						throw new KVException(new KVMessage("resp", "Message format incorrect"));
-						
-                    String key = keyList.item(0).getTextContent();
-                    String value = valueList.item(0).getTextContent();
-                    if (key==null || key.length()==0 || value==null || value.length()==0)
-                        throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                    this.key = key;
-                    this.value = value;
-				}
-				else {
-					String message = messageList.item(0).getTextContent();
-					if (message==null || message.length()==0)
-						throw new KVException(new KVMessage("resp", "Message format incorrect"));
-					this.message = message;
-				}
-			}
-            else if (this.msgType.equals("ready")) {
-				if (tpcOpIdList.getLength()==0)
-					throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                
-                String tpcOpId = tpcOpIdList.item(0).getTextContent();
-                if (tpcOpId==null || tpcOpId.length()==0)
-                    throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                this.tpcOpId = tpcOpId;
-            }
-            else if (this.msgType.equals("commit")) {
-				if (tpcOpIdList.getLength()==0)
-					throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                
-                String tpcOpId = tpcOpIdList.item(0).getTextContent();
-                if (tpcOpId==null || tpcOpId.length()==0)
-                    throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                this.tpcOpId = tpcOpId;
-            }
-			else if (this.msgType.equals("abort")) {
-				if (tpcOpIdList.getLength()==0)
-					throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                
-                String tpcOpId = tpcOpIdList.item(0).getTextContent();
-                if (tpcOpId==null || tpcOpId.length()==0)
-                    throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                this.tpcOpId = tpcOpId;
-
-                if (messageList.getLength()==1) {
-                    String message = messageList.item(0).getTextContent();
-                    if (message==null || message.length()==0)
-                        throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                    this.message = message;
-                }
-			}
-            else if (this.msgType.equals("ack")) {
-				if (tpcOpIdList.getLength()==0)
-					throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                
-                String tpcOpId = tpcOpIdList.item(0).getTextContent();
-                if (tpcOpId==null || tpcOpId.length()==0)
-                    throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                this.tpcOpId = tpcOpId;
-            }
-			else if (this.msgType.equals("register")) {
-				if (messageList.getLength() == 0)
-                    throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                
-                String message = messageList.item(0).getTextContent();
-                if (message==null || message.length()==0)
-                    throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                this.message = message;
-			}
-            else if (this.msgType.equals("ignoreNext")) {
-                // TODO
-            }
-			else {
-				throw new KVException(new KVMessage("resp", "Message format incorrect"));
-			}
-		}
-		catch (IOException e) {
-			throw new KVException(new KVMessage("resp", "Network Error: Could not receive data"));
 		}
 		catch (ParserConfigurationException e) {
 			throw new KVException(new KVMessage("resp", "XML Error: Received unparseable message"));
@@ -289,33 +171,50 @@ public class KVMessage implements Serializable {
 	}
 	
 	/**
-	 * 
-	 * @param sock Socket to receive from
+	 * @param socket Socket to receive from
 	 * @throws KVException if there is an error in parsing the message. The exception should be of type "resp and message should be :
 	 * a. "XML Error: Received unparseable message" - if the received message is not valid XML.
 	 * b. "Network Error: Could not receive data" - if there is a network error causing an incomplete parsing of the message.
 	 * c. "Message format incorrect" - if there message does not conform to the required specifications. Examples include incorrect message type. 
 	 */
-	public KVMessage(Socket sock) throws KVException {
-		
+	public KVMessage(Socket socket) throws KVException {
+		try {
+			InputStream is = socket.getInputStream();
+			this(is);
+			socket.close();
+		}
+		catch (IOException e) {
+			throw new KVException(new KVMessage("resp", "Network Error: Could not receive data"));
+		}
+		catch (KVException e) {
+			throw e;
+		}
 	}
 
 	/**
 	 * 
-	 * @param sock Socket to receive from
+	 * @param socket Socket to receive from
 	 * @param timeout Give up after timeout milliseconds
 	 * @throws KVException if there is an error in parsing the message. The exception should be of type "resp and message should be :
 	 * a. "XML Error: Received unparseable message" - if the received message is not valid XML.
 	 * b. "Network Error: Could not receive data" - if there is a network error causing an incomplete parsing of the message.
 	 * c. "Message format incorrect" - if there message does not conform to the required specifications. Examples include incorrect message type. 
 	 */
-	public KVMessage(Socket sock, int timeout) throws KVException {
-	     // TODO: implement me
+	public KVMessage(Socket socket, int timeout) throws KVException {
+		try {
+			socket.setSoTimeout(timeout);
+			this(socket);
+		}
+		catch (SocketException e) {
+			//Do nothing
+		}
+		catch (KVException e) {
+			throw e;
+		}
 	}
 	
 	/**
 	 * Copy constructor
-	 * 
 	 * @param kvm
 	 */
 	public KVMessage(KVMessage kvm) {
@@ -326,6 +225,47 @@ public class KVMessage implements Serializable {
 		this.tpcOpId = kvm.tpcOpId;
 	}
 
+	//Helper Methods
+	public final String getMsgType() { return msgType; }
+	public final String getKey() { return key; }
+	public final String getValue() { return value; }
+	public final String getMessage() { return message; }
+	public final String getTpcOpId() { return tpcOpId; }
+
+    public final void setMsgType(String msgType) { this.msgType = msgType; }
+	public final void setKey(String key) { this.key = key; }
+	public final void setValue(String value) { this.value = value; }
+	public final void setMessage(String message) { this.message = message; }
+	public final void setTpcOpId(String tpcOpId) { this.tpcOpId = tpcOpId; }
+
+	private String validMsgType(String msgType) throws KVException {
+		if (msgType.equals("getreq") || msgType.equals("putreq") ||
+            msgType.equals("delreq") || msgType.equals("resp") ||
+            msgType.equals("abort") || msgType.equals("commit") ||
+            msgType.equals("ready") || msgType.equals("ack") ||
+            msgType.equals("register") || msgType.equals("ignoreNext"))
+			return msgType;
+        throw new KVException(new KVMessage("resp", "Message format incorrect"));
+	}
+
+    public String validNodeList(NodeList nodeList) throws KVException {
+        if (nodeList.getLength()==0)
+            throw new KVException(new KVMessage("resp", "Message format incorrect"));
+        
+        String result = nodeList.item(0).getTextContent();
+        if (result==null || result.length()==0)
+            throw new KVException(new KVMessage("resp", "Message format incorrect"));
+        return result;
+    }
+
+    public void appendElem(String field, Element parent, Element child, Node text) throws KVException {
+        if (field==null || field.length()==0)
+            throw new KVException(new KVMessage("resp", "Message format incorrect"));
+        parent.appendChild(child);
+        child.appendChild(text);
+    }
+
+    //Action Methods
 	/**
 	 * Generate the XML representation for this message.
 	 * @return the XML String
@@ -347,100 +287,66 @@ public class KVMessage implements Serializable {
 			Node keyText = doc.createTextNode(this.key);
 			Node valueText = doc.createTextNode(this.value);
 			Node messageText = doc.createTextNode(this.message);
-            Node tpcOpIdText = doc.createTextNode(this.tcpOpId);
+            Node tpcOpIdText = doc.createTextNode(this.tpcOpId);
 			
 			doc.appendChild(rootElem);
-			
-			if (this.msgType.equals("getreq")) {
-				rootElem.setAttribute("type", "getreq");
-				if (this.key==null || this.key.length()==0)
-					throw new KVException(new KVMessage("resp", "Message format incorrect"));
-				rootElem.appendChild(keyElem);
-                rootElem.appendChild(tpcOpIdElem);
-				keyElem.appendChild(keyText);
-                tpcOpIdElem.appendChild(tpcOpIdText);
-                // TODO
-			}
-			else if (this.msgType.equals("putreq")) {
-				rootElem.setAttribute("type", "putreq");
-				if (this.key==null || this.key.length()==0 || this.value==null || this.value.length()==0)
-					throw new KVException(new KVMessage("resp", "Message format incorrect"));
-				rootElem.appendChild(keyElem);
-				rootElem.appendChild(valueElem);
-                rootElem.appendChild(tpcOpIdElem);
-				keyElem.appendChild(keyText);
-				valueElem.appendChild(valueText);
-                tpcOpIdElem.appendChild(tpcOpIdText);
-			}
-			else if (this.msgType.equals("delreq")) {
-				rootElem.setAttribute("type", "delreq");
-				if (this.key==null || this.key.length()==0)
-					throw new KVException(new KVMessage("resp", "Message format incorrect"));
-				rootElem.appendChild(keyElem);
-                rootElem.appendChild(tpcOpIdElem);
-				keyElem.appendChild(keyText);
-                tpcOpIdElem.appendChild(tpcOpIdText);
-			}
-			else if (this.msgType.equals("resp")) {
-				rootElem.setAttribute("type", "resp");
-				if (this.message==null || this.message.length()==0) {
-					if (this.key==null || this.key.length()==0 || this.value==null || this.value.length()==0)
-						throw new KVException(new KVMessage("resp", "Message format incorrect"));
-					rootElem.appendChild(keyElem);
-					rootElem.appendChild(valueElem);
-					keyElem.appendChild(keyText);
-					valueElem.appendChild(valueText);
-				}
-				else {
-					rootElem.appendChild(messageElem);
-					messageElem.appendChild(messageText);
-				}
-			}
-            else if (this.msgType.equals("ready")) {
-                rootElem.setAttribute("type", "ready");
-                if (this.tpcOpId==null)
-                    throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                rootElem.appendChild(tpcOpIdElem);
-                tpcOpIdElem.appendChild(tpcOpIdText);
-            }
-            else if (this.msgType.equals("commit")) {
-                rootElem.setAttribute("type", "commit");
-                if (this.tpcOpId==null)
-                    throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                rootElem.appendChild(tpcOpIdElem);
-                tpcOpIdElem.appendChild(tpcOpIdText);
-            }
-            else if (this.msgType.equals("abort")) {
-                rootElem.setAttribute("type", "abort");
-                if (this.tpcOpId==null)
-                    throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                rootElem.appendChild(tpcOpIdElem);
-                tpcOpIdElem.appendChild(tpcOpIdText);
-                if (this.message!=null) {
-                    rootElem.appendChild(messageElem);
-                    messageElem.appendChild(messageText);
-                }
-            }
-            else if (this.msgType.equals("ack")) {
-                rootElem.setAttribute("type", "ack");
-                if (this.tpcOpId==null)
-                    throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                rootElem.appendChild(tpcOpIdElem);
-                tpcOpIdElem.appendChild(tpcOpIdText);
-            }
-            else if (this.msgType.equals("register")) {
-                rootElem.setAttribute("type", "register");
-                if (this.message==null || this.message.length()==0)
-                    throw new KVException(new KVMessage("resp", "Message format incorrect"));
-                rootElem.appendChild(messageElem);
-                messageElem.appendChild(messageText);
-            }
-            else if (this.msgType.equals("ignoreNext")) {
-                rootElem.setAttribute("type", "ignoreNext");
-                // TODO
-            }
-			else {
-				throw new KVException(new KVMessage("resp", "Message format incorrect"));
+            switch (this.msgType) {
+                case "getreq":
+                    rootElem.setAttribute("type", "getreq");
+                    this.appendElem(this.key, rootElem, keyElem, keyText);
+                    break;
+                case "putreq":
+                    rootElem.setAttribute("type", "putreq");
+                    this.appendElem(this.key, rootElem, keyElem, keyText);
+                    this.appendElem(this.value, rootElem, valueElem, valueText);
+
+                    if (this.tpcOpId!=null)
+                        this.appendElem(this.tpcOpId, rootElem, tpcOpIdElem, tpcOpIdText);
+                    break;
+                case "delreq":
+                    rootElem.setAttribute("type", "delreq");
+                    this.appendElem(this.key, rootElem, keyElem, keyText);
+
+                    if (this.tpcOpId!=null)
+                        this.appendElem(this.tpcOpId, rootElem, tpcOpIdElem, tpcOpIdText);
+                    break;
+                case "resp":
+                    rootElem.setAttribute("type", "resp");
+                    if (this.message==null) {
+                        this.appendElem(this.key, rootElem, keyElem, keyText);
+                        this.appendElem(this.value, rootElem, valueElem, valueText);
+                    }
+                    else
+                        this.appendElem(this.message, rootElem, messageElem, messageText);
+                    break;
+                case "abort":
+                    rootElem.setAttribute("type", "abort");
+                    if (this.message!=null)
+                        this.appendElem(this.message, rootElem, messageElem, messageText);
+                    this.appendElem(this.tpcOpId, rootElem, tpcOpIdElem, tpcOpIdText);
+                    break;
+                case "commit":
+                    rootElem.setAttribute("type", "commit");
+                    this.appendElem(this.tpcOpId, rootElem, tpcOpIdElem, tpcOpIdText);
+                    break;
+                case "ready":
+                    rootElem.setAttribute("type", "ready");
+                    this.appendElem(this.tpcOpId, rootElem, tpcOpIdElem, tpcOpIdText);
+                    break;
+                case "ack":
+                    rootElem.setAttribute("type", "ack");
+                    this.appendElem(this.tpcOpId, rootElem, tpcOpIdElem, tpcOpIdText);
+                    break;
+                case "register":
+                    rootElem.setAttribute("type", "register");
+                    this.appendElem(this.message, rootElem, messageElem, messageText);
+                    break;
+                case "ignoreNext":
+                    rootElem.setAttribute("type", "ignoreNext");
+                    // TODO
+                    break;
+                default:
+				    throw new KVException(new KVMessage("resp", "Message format incorrect"));
 			}
 			
 			DOMSource domSource = new DOMSource(doc);
@@ -462,7 +368,7 @@ public class KVMessage implements Serializable {
 		return null;
 	}
 	
-	public void sendMessage(Socket sock) throws KVException {
+	public void sendMessage(Socket socket) throws KVException {
 		try {
 			String xml = this.toXML();
 			OutputStream os = socket.getOutputStream();
@@ -493,14 +399,22 @@ public class KVMessage implements Serializable {
 	    }
 	}
 	
-	public void sendMessage(Socket sock, int timeout) throws KVException {
+	public void sendMessage(Socket socket, int timeout) throws KVException {
 		/*
 		 * As was pointed out, setting a timeout when sending the message (while would still technically work),
 		 * is a bit silly. As such, this method will be taken out at the end of Spring 2013.
 		 */
-		// TODO: optional implement me
+		try {
+			socket.setSoTimeout(timeout);
+			this.sendMessage(socket);
+		}
+		catch (SocketException e) {
+			//Do nothing
+		}
+		catch (KVException e) {
+			throw e;
+		}
 	}
-    /** Part I END */
 
     //Class
 	/* Solution from http://weblogs.java.net/blog/kohsuke/archive/2005/07/socket_xml_pitf.html */
