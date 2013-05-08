@@ -63,13 +63,17 @@ public class KVClient implements KeyValueInterface {
 	public String getServer() { return this.server; }
 	public int getPort() { return this.port; }
 	
+	public void throwKVE(String errorMessage) throws KVException {
+        throw new KVException(new KVMessage("resp", errorMessage));
+    }
+	
 	//Action Methods
 	private Socket connectHost() throws KVException {
-		Socket socket;
+		Socket socket = null;
 		try {
 			socket = new Socket(this.server, this.port);
 		}
-		catch (Exception e) { throw new KVException(new KVMessage("resp", "Network Error: Could not create socket")); }
+		catch (Exception e) { throwKVE("Network Error: Could not create socket"); }
 		return socket;
 	}
 	
@@ -77,37 +81,36 @@ public class KVClient implements KeyValueInterface {
 	    try {
 	    	socket.close();
 	    }
-	    catch (Exception e) { throw new KVException(new KVMessage("resp", "Unknown Error: Could not close socket")); }
+	    catch (Exception e) { throwKVE("Unknown Error: Could not close socket"); }
 	}
 	
 	public void put(String key, String value) throws KVException {
 	    if (key.length() > 256)
-	    	throw new KVException(new KVMessage("resp", "Oversized key"));
+	    	throwKVE("Oversized key");
 	    if (value.length() > 256*1024)
-	    	throw new KVException(new KVMessage("resp", "Oversized value"));
+	    	throwKVE("Oversized value");
 	    
-	    Socket socket = connectHost();
-	    
-	    KVMessage request = null;
-	    KVMessage response = null;
-	    InputStream is = null;
-	    
-	    request = new KVMessage("putreq");
-	    request.setKey(key);
-	    request.setValue(value);
-	    request.sendMessage(socket);
-	    
-	    try {
-	    	is = socket.getInputStream();
-	    }
-	    catch (IOException e){ throw new KVException(new KVMessage("resp", "Network Error: Could not receive data")); }
-	    
-	    response = new KVMessage(is);
-	    
-	    if (response.getMessage().equals("Success")) {
-            closeHost(socket);
+	    Socket socket = null;
+        try {
+            socket = connectHost();
+            
+            KVMessage request = null;
+            KVMessage response = null;
+            InputStream is = null;
+            
+            request = new KVMessage("putreq");
+            request.setKey(key);
+            request.setValue(value);
+            request.sendMessage(socket);
+            
+            is = socket.getInputStream();
+            response = new KVMessage(is);
+            if (!response.getMessage().equals("Success"))
+                throw new KVException(response);
         }
-	    throw new KVException(response);
+        catch (IOException e) { throwKVE("Network Error: Could not receive data"); }
+        catch (KVException e) { throw e; }
+        finally { closeHost(socket); }
 	}
 
 
@@ -115,59 +118,80 @@ public class KVClient implements KeyValueInterface {
 		if (key.length() > 256)
 	    	throw new KVException(new KVMessage("resp", "Oversized key"));
 		
-		Socket socket = connectHost();
-		
-	    String value = null;
-	    KVMessage request = null;
-	    KVMessage response = null;
-	    InputStream is = null;
-	    
-	    request = new KVMessage("getreq");
-	    request.setKey(key);
-	    request.sendMessage(socket);
-	    
-	    try {
-	    	is = socket.getInputStream();
-	    }
-	    catch (IOException e) { throw new KVException(new KVMessage("resp", "Network Error: Could not receive data")); }
-	    
-	    response = new KVMessage(is);
-	    value = response.getValue();
-	    if (value != null) {
-            closeHost(socket);
-	    	return value;
+		Socket socket = null;
+		String value = null;
+        try {
+            socket = connectHost();
+            
+            KVMessage request = null;
+            KVMessage response = null;
+            InputStream is = null;
+            
+            request = new KVMessage("getreq");
+            request.setKey(key);
+            request.sendMessage(socket);
+            
+            is = socket.getInputStream();
+            response = new KVMessage(is);
+            value = response.getValue();
+            if (value == null)
+                throw new KVException(response);
+            return value;
         }
-	    throw new KVException(response);
+        catch (IOException e) { throwKVE("Network Error: Could not receive data"); }
+        catch (KVException e) { throw e; }
+        finally {
+        	closeHost(socket);
+        	return value;
+        }
 	}
 	
 	public void del(String key) throws KVException {
 		if (key.length() > 256)
-	    	throw new KVException(new KVMessage("resp", "Oversized value"));
+	    	throwKVE("Oversized value");
 		
-		Socket socket = connectHost();
-		
-		KVMessage request = null;
-		KVMessage response = null;
-		InputStream is = null;
-		
-		request = new KVMessage("delreq");
-		request.setKey(key);
-		request.sendMessage(socket);
-		
-		try {
-			is = socket.getInputStream();
-		}
-	    catch (IOException e) { throw new KVException(new KVMessage("resp", "Network Error: Could not receive data")); }
-		
-		response = new KVMessage(is);
-		if (response.getMessage().equals("Success")) {
-            closeHost(socket);
-			return;
+		Socket socket = null;
+        try {
+            socket = connectHost();
+            
+            KVMessage request = null;
+            KVMessage response = null;
+            InputStream is = null;
+            
+            request = new KVMessage("delreq");
+            request.setKey(key);
+            request.sendMessage(socket);
+            
+            is = socket.getInputStream();
+            response = new KVMessage(is);
+            if (!response.getMessage().equals("Success"))
+                throw new KVException(response);
         }
-		throw new KVException(response);
+        catch (IOException e) { throwKVE("Network Error: Could not receive data"); }
+        catch (KVException e) { throw e; }
+        finally { closeHost(socket); }
 	}
 	
 	public void ignoreNext() throws KVException {
-	    // TODO: Implement Me!
+        Socket socket = null;
+        
+		try {
+            socket = connectHost();
+
+            KVMessage request = null;
+            KVMessage response = null;
+            InputStream is = null;
+
+            request = new KVMessage("ignoreNext");
+            request.sendMessage(socket);
+
+            is = socket.getInputStream();
+            response = new KVMessage(is);
+            if (!response.getMessage().equals("Success"))
+                throw new KVException(response);
+        }
+        catch (IOException e) { throwKVE("Network Error: Could not receive data"); }
+        catch (KVException e) { throw e; }
+        finally { closeHost(socket); }
 	}
 }

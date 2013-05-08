@@ -96,10 +96,109 @@ public class KVMessage implements Serializable {
      * c. "Message format incorrect" - if there message does not conform to the required specifications. Examples include incorrect message type. 
      */
 	public KVMessage(InputStream input) throws KVException {
+		this.constructHelper(input);
+	}
+	
+	/**
+	 * @param socket Socket to receive from
+	 * @throws KVException if there is an error in parsing the message. The exception should be of type "resp and message should be :
+	 * a. "XML Error: Received unparseable message" - if the received message is not valid XML.
+	 * b. "Network Error: Could not receive data" - if there is a network error causing an incomplete parsing of the message.
+	 * c. "Message format incorrect" - if there message does not conform to the required specifications. Examples include incorrect message type. 
+	 */
+	public KVMessage(Socket socket) throws KVException {
+		try {
+			InputStream is = socket.getInputStream();
+			this.constructHelper(is);
+			socket.close();
+		}
+		catch (IOException e) { throwKVE("Network Error: Could not receive data"); }
+		catch (KVException e) { throw e; }
+	}
+
+	/**
+	 * 
+	 * @param socket Socket to receive from
+	 * @param timeout Give up after timeout milliseconds
+	 * @throws KVException if there is an error in parsing the message. The exception should be of type "resp and message should be :
+	 * a. "XML Error: Received unparseable message" - if the received message is not valid XML.
+	 * b. "Network Error: Could not receive data" - if there is a network error causing an incomplete parsing of the message.
+	 * c. "Message format incorrect" - if there message does not conform to the required specifications. Examples include incorrect message type. 
+	 */
+	public KVMessage(Socket socket, int timeout) throws KVException {
+		try {
+			socket.setSoTimeout(timeout);
+			InputStream is = socket.getInputStream();
+			this.constructHelper(is);
+			socket.close();
+		}
+		catch (SocketException e) { throwKVE("Unknow Error: Timeout"); }
+		catch (IOException e) { throwKVE("Network Error: Could not receive data"); }
+		catch (KVException e) { throw e; }
+	}
+	
+	/**
+	 * Copy constructor
+	 * @param kvm
+	 */
+	public KVMessage(KVMessage kvm) {
+		this.msgType = kvm.msgType;
+		this.key = kvm.key;
+		this.value = kvm.value;
+		this.message = kvm.message;
+		this.tpcOpId = kvm.tpcOpId;
+	}
+
+	//Helper Methods
+	public final String getMsgType() { return msgType; }
+	public final String getKey() { return key; }
+	public final String getValue() { return value; }
+	public final String getMessage() { return message; }
+	public final String getTpcOpId() { return tpcOpId; }
+
+    public final void setMsgType(String msgType) { this.msgType = msgType; }
+	public final void setKey(String key) { this.key = key; }
+	public final void setValue(String value) { this.value = value; }
+	public final void setMessage(String message) { this.message = message; }
+	public final void setTpcOpId(String tpcOpId) { this.tpcOpId = tpcOpId; }
+
+    public void throwKVE(String errorMessage) throws KVException {
+        throw new KVException(new KVMessage("resp", errorMessage));
+    }
+    
+	private String validMsgType(String msgType) throws KVException {
+		if (msgType.equals("getreq") || msgType.equals("putreq") ||
+            msgType.equals("delreq") || msgType.equals("resp") ||
+            msgType.equals("abort") || msgType.equals("commit") ||
+            msgType.equals("ready") || msgType.equals("ack") ||
+            msgType.equals("register") || msgType.equals("ignoreNext"))
+			return msgType;
+		throwKVE("Message format incorrect");
+		return null;
+	}
+
+    public String validNodeList(NodeList nodeList) throws KVException {
+        if (nodeList.getLength()==0)
+        	throwKVE("Message format incorrect");
+        
+        String result = nodeList.item(0).getTextContent();
+        if (result==null || result.length()==0)
+        	throwKVE("Message format incorrect");
+        return result;
+    }
+
+    public void appendElem(String field, Element parent, Element child, Node text) throws KVException {
+        if (field==null || field.length()==0)
+        	throwKVE("Message format incorrect");
+        parent.appendChild(child);
+        child.appendChild(text);
+    }
+    
+    public void constructHelper(InputStream is) throws KVException {
 		try {
 			DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
 			DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
-			Document doc = dBuilder.parse(new NoCloseInputStream(input));
+			Document doc = dBuilder.parse(new NoCloseInputStream(is));
 
 			Element root = doc.getDocumentElement();
 			root.normalize();
@@ -154,117 +253,14 @@ public class KVMessage implements Serializable {
                     // TODO
                     break;
                 default:
-				    throw new KVException(new KVMessage("resp", "Message format incorrect"));
+				    throwKVE("Message format incorrect");
 			}
 		}
-		catch (ParserConfigurationException e) {
-			throw new KVException(new KVMessage("resp", "XML Error: Received unparseable message"));
-		}
-		catch (SAXException e) {
-			throw new KVException(new KVMessage("resp", "XML Error: Received unparseable message"));
-		}
-		catch (KVException e) {
-			throw e;
-		}
-		catch (Exception e) {
-			throw new KVException(new KVMessage("resp", "Unknow Error: " + e.getLocalizedMessage()));
-		}
+		catch (ParserConfigurationException e) { throwKVE("XML Error: Received unparseable message"); }
+		catch (SAXException e) { throwKVE("XML Error: Received unparseable message"); }
+		catch (KVException e) { throw e; }
+		catch (Exception e) { throwKVE("Unknow Error: " + e.getLocalizedMessage()); }
 	}
-	
-	/**
-	 * @param socket Socket to receive from
-	 * @throws KVException if there is an error in parsing the message. The exception should be of type "resp and message should be :
-	 * a. "XML Error: Received unparseable message" - if the received message is not valid XML.
-	 * b. "Network Error: Could not receive data" - if there is a network error causing an incomplete parsing of the message.
-	 * c. "Message format incorrect" - if there message does not conform to the required specifications. Examples include incorrect message type. 
-	 */
-	public KVMessage(Socket socket) throws KVException {
-		try {
-			InputStream is = socket.getInputStream();
-			this(is);
-			socket.close();
-		}
-		catch (IOException e) {
-			throw new KVException(new KVMessage("resp", "Network Error: Could not receive data"));
-		}
-		catch (KVException e) {
-			throw e;
-		}
-	}
-
-	/**
-	 * 
-	 * @param socket Socket to receive from
-	 * @param timeout Give up after timeout milliseconds
-	 * @throws KVException if there is an error in parsing the message. The exception should be of type "resp and message should be :
-	 * a. "XML Error: Received unparseable message" - if the received message is not valid XML.
-	 * b. "Network Error: Could not receive data" - if there is a network error causing an incomplete parsing of the message.
-	 * c. "Message format incorrect" - if there message does not conform to the required specifications. Examples include incorrect message type. 
-	 */
-	public KVMessage(Socket socket, int timeout) throws KVException {
-		try {
-			socket.setSoTimeout(timeout);
-			this(socket);
-		}
-		catch (SocketException e) {
-			//Do nothing
-		}
-		catch (KVException e) {
-			throw e;
-		}
-	}
-	
-	/**
-	 * Copy constructor
-	 * @param kvm
-	 */
-	public KVMessage(KVMessage kvm) {
-		this.msgType = kvm.msgType;
-		this.key = kvm.key;
-		this.value = kvm.value;
-		this.message = kvm.message;
-		this.tpcOpId = kvm.tpcOpId;
-	}
-
-	//Helper Methods
-	public final String getMsgType() { return msgType; }
-	public final String getKey() { return key; }
-	public final String getValue() { return value; }
-	public final String getMessage() { return message; }
-	public final String getTpcOpId() { return tpcOpId; }
-
-    public final void setMsgType(String msgType) { this.msgType = msgType; }
-	public final void setKey(String key) { this.key = key; }
-	public final void setValue(String value) { this.value = value; }
-	public final void setMessage(String message) { this.message = message; }
-	public final void setTpcOpId(String tpcOpId) { this.tpcOpId = tpcOpId; }
-
-	private String validMsgType(String msgType) throws KVException {
-		if (msgType.equals("getreq") || msgType.equals("putreq") ||
-            msgType.equals("delreq") || msgType.equals("resp") ||
-            msgType.equals("abort") || msgType.equals("commit") ||
-            msgType.equals("ready") || msgType.equals("ack") ||
-            msgType.equals("register") || msgType.equals("ignoreNext"))
-			return msgType;
-        throw new KVException(new KVMessage("resp", "Message format incorrect"));
-	}
-
-    public String validNodeList(NodeList nodeList) throws KVException {
-        if (nodeList.getLength()==0)
-            throw new KVException(new KVMessage("resp", "Message format incorrect"));
-        
-        String result = nodeList.item(0).getTextContent();
-        if (result==null || result.length()==0)
-            throw new KVException(new KVMessage("resp", "Message format incorrect"));
-        return result;
-    }
-
-    public void appendElem(String field, Element parent, Element child, Node text) throws KVException {
-        if (field==null || field.length()==0)
-            throw new KVException(new KVMessage("resp", "Message format incorrect"));
-        parent.appendChild(child);
-        child.appendChild(text);
-    }
 
     //Action Methods
 	/**
@@ -347,7 +343,7 @@ public class KVMessage implements Serializable {
                     // TODO
                     break;
                 default:
-				    throw new KVException(new KVMessage("resp", "Message format incorrect"));
+				    throwKVE("Message format incorrect");
 			}
 			
 			DOMSource domSource = new DOMSource(doc);
@@ -360,7 +356,7 @@ public class KVMessage implements Serializable {
 			return xmlString;
 		}
 		catch (KVException e) { throw e; }
-		catch (Exception e) { e.getStackTrace(); }
+		catch (Exception e) { throwKVE("Unknow Error: " + e.getLocalizedMessage()); }
 		return null;
 	}
 	
@@ -370,19 +366,19 @@ public class KVMessage implements Serializable {
 			OutputStream os = socket.getOutputStream();
 			os.write(xml.getBytes(), 0, xml.length());
 		}
-		catch (IOException e) { throw new KVException(new KVMessage("resp", "Network Error: Could not send data")); }
+		catch (IOException e) { throwKVE("Network Error: Could not send data"); }
 		catch (KVException e) { throw e; }
-		catch (Exception e) { throw new KVException(new KVMessage("resp", "Unknown Error: " + e.getLocalizedMessage())); }
+		catch (Exception e) { throwKVE("Unknow Error: " + e.getLocalizedMessage()); }
 		
 		try {
 			socket.getOutputStream().flush();
 		}
-		catch (IOException e) { throw new KVException(new KVMessage("resp", "Unknown Error: Socket is not connected")); }
+		catch (IOException e) { throwKVE("Unknown Error: Socket is not connected"); }
 		
 		try {
 			socket.shutdownOutput();
 		}
-	    catch (IOException e) { throw new KVException(new KVMessage("resp", "Unknown Error: " + e.getLocalizedMessage())); }
+		catch (IOException e) { throwKVE("Unknown Error: " + e.getLocalizedMessage()); }
 	}
 	
 	public void sendMessage(Socket socket, int timeout) throws KVException {
@@ -394,12 +390,8 @@ public class KVMessage implements Serializable {
 			socket.setSoTimeout(timeout);
 			this.sendMessage(socket);
 		}
-		catch (SocketException e) {
-			//Do nothing
-		}
-		catch (KVException e) {
-			throw e;
-		}
+		catch (SocketException e) { throwKVE("Unknow Error: Timeout"); }
+		catch (KVException e) { throw e; }
 	}
 
     //Class
