@@ -102,18 +102,29 @@ public class TPCMasterHandler implements NetworkHandler {
 			else if (msg.getMsgType().equals("ignoreNext")) {
 				// Set ignoreNext to true. PUT and DEL handlers know what to do.
 				// Implement me
-				
 				// Send back an acknowledgment
 				// Implement me
+				ignoreNext = true;
+				try {
+					KVMessage ackMsg = new KVMessage("ack");
+					ackMsg.setTpcOpId(msg.getTpcOpId());
+					ackMsg.sendMessage(client);
+				} catch(KVException e) {
+					//TODO: not sure about this case, maybe should pass along
+				}
 			}
 			else if (msg.getMsgType().equals("commit") || msg.getMsgType().equals("abort")) {
 				// Check in TPCLog for the case when SlaveServer is restarted
 				// Implement me
+				if(tpcLog.hasInterruptedTpcOperation())
+					originalMessage = tpcLog.getInterruptedTpcOperation();
 				
 				handleMasterResponse(msg, originalMessage, aborted);
 				
 				// Reset state
 				// Implement me
+				originalMessage = null;
+				aborted = true;
 			}
 			
 			// Finally, close the connection
@@ -122,10 +133,43 @@ public class TPCMasterHandler implements NetworkHandler {
 
 		private void handlePut(KVMessage msg, String key) {
 			AutoGrader.agTPCPutStarted(slaveID, msg, key);
-			
+			//write to log and set message
+			tpcLog.appendAndFlush(msg); //TODO: check if already written to log
 			// Store for use in the second phase
 			originalMessage = new KVMessage(msg);
 			
+			//check for failure
+			if(ignoreNext == true) {
+				try{
+					KVMessage abortMsg = new KVMessage("abort", "Ignored");
+					abortMsg.setTpcOpId( msg.getTpcOpId() );
+					tpcLog.appendAndFlush(abortMsg);
+					abortMsg.sendMessage( client );//VOTE-ABORT
+					ignoreNext = false;
+				} catch(KVException e) {
+					//TODO: here
+				}
+			}//Check conditions from Project 3
+			else if(key.length() > 256 || originalMessage.getValue().length() > 256*1024) {
+				try {
+					KVMessage abortMsg = new KVMessage("abort", "Oversized key");
+					abortMsg.setTpcOpId( msg.getTpcOpId() );
+					tpcLog.appendAndFlush(abortMsg);
+					abortMsg.sendMessage(client);//VOTE-ABORT
+				} catch(KVException e) {
+					//TODO: still need to figure out how to deal with these cases
+				}
+			} else {
+				try {
+					aborted = false;
+					KVMessage readyMsg = new KVMessage("ready");
+					readyMsg.setTpcOpId( msg.getTpcOpId() );
+					tpcLog.appendAndFlush(readyMsg);
+					readyMsg.sendMessage(client);//VOTE- COMMIT
+				} catch(KVException e) {
+					//TODO: Same issue
+				}
+			}
 			// Implement me
 
 			AutoGrader.agTPCPutFinished(slaveID, msg, key);
