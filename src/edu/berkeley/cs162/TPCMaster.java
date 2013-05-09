@@ -42,17 +42,22 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
 public class TPCMaster {
+
+    //Helper Methods
+    public void throwKVE(String errorMessage) throws KVException {
+        throw new KVException(new KVMessage("resp", errorMessage));
+    }
 	
 	/**
 	 * Implements NetworkHandler to handle registration requests from 
 	 * SlaveServers.
 	 */
 	private class TPCRegistrationHandler implements NetworkHandler {
-
+        //Fields
 		private ThreadPool threadpool = null;
 
+        //Constructors
 		public TPCRegistrationHandler() {
-			// Call the other constructor
 			this(1);
 		}
 
@@ -60,96 +65,110 @@ public class TPCMaster {
 			threadpool = new ThreadPool(connections);	
 		}
 
+        //Action Methods
 		@Override
-		public void handle(Socket client) throws IOException {
-			// implement me
-            RegistrationHandler regHandler = new RegistrationHandler(client);
-            regHandler.run();
+		public void handle(Socket socket) throws IOException {
+			try {
+				RegistrationHandler regHandler = new RegistrationHandler(socket);
+				this.threadpool.addToQueue(regHandler);
+			}
+			catch (InterruptedException e) {
+				//Do nothing
+			}
 		}
 		
+        //Helper Class
 		private class RegistrationHandler implements Runnable {
 			//Fields
-			private Socket client = null;
+			private Socket socket = null;
+            private KVMessage request = null;
+            private KVMessage response = null;
             
             //Constructor
-			public RegistrationHandler(Socket client) {
-				this.client = client;
+			public RegistrationHandler(Socket socket) {
+				this.socket = socket;
 			}
             
             //Methods
 			@Override
 			public void run() {
-				// implement me
-                request = new KVMessage(client.getInputStream());
-                if (request.getMsgType().equals("register"))
-                    reply = registerReq(request);
-                else
-                    throw new IllegalArgumentException();
-
-                reply.sendMessage(client);
+                try {
+                    request = new KVMessage(socket.getInputStream());
+                    response = new KVMessage("resp");
+                    if (request.getMsgType().equals("register")) {
+                        SlaveInfo slave = new SlaveInfo(request.getMessage());
+                        synchronized (slaveServers) {
+                        	slaveServers.put(slave.getSlaveID(), slave);
+                        }
+                        response.setMessage(regAck(slave));
+                    }
+                }
+                catch (IOException e) {
+                    response.setMessage("Network Error: Could not receive data");
+                }
+                catch (KVException e) {
+                    response.setMessage(e.getMsg().getMessage());
+                }
+                finally {
+                	try { response.sendMessage(socket); }
+                	catch (KVException e) {
+                		//Do nothing
+                	}
+                }
 			}
 
-            public KVMessage registerReq(KVMessage request) throws KVException {
-                slaveInfo = new SlaveInfo(request.getMessage());
-                if (slaves.containsKey(slaveInfo.slaveID))
-                    return new KVMessage("resp", "Fail");
-                slaves.put(slaveInfo.slaveID, slaveInfo);
-                return new KVMessage("resp", "Success");
+            public String regAck(SlaveInfo slave) {
+                return "Successfully registered " + slave.getSlaveID() + "@" + slave.getHostName() + ":" + slave.getPort();
             }
 		}	
 	}
-	
+
 	/**
 	 *  Data structure to maintain information about SlaveServers
 	 */
 	private class SlaveInfo {
-		// 64-bit globally unique ID of the SlaveServer
-		private long slaveID = -1;
-		// Name of the host this SlaveServer is running on
-		private String hostName = null;
-		// Port which SlaveServer is listening to
-		private int port = -1;
+        //Fields
+		private long slaveID = -1; // 64-bit globally unique ID of the SlaveServer
+		private String hostName = null; // Name of the host this SlaveServer is running on
+		private int port = -1; // Port which SlaveServer is listening to
 
+        //Constructor
 		/**
-		 * 
 		 * @param slaveInfo as "SlaveServerID@HostName:Port"
 		 * @throws KVException
 		 */
 		public SlaveInfo(String slaveInfo) throws KVException {
-			// implement me
 			try {
-				String splitted1[] = slaveInfo.split("@");
-				String splitted2[] = splitted1[1].split(":");
-				
-				this.slaveID = hashTo64bit(splitted1[0]);
-				this.hostName = splitted2[0];
-				this.port = Integer.parseInt(splitted2[1]);
-				
-			} catch (Exception e) {
-				throw new KVException(new KVMessage("resp", "Registration Error: Received unparseable slave information"));
+                String delimiters = "[@:]";
+                String[] tokens = slaveInfo.split(delimiters);
+                
+                this.slaveID = Long.parseLong(tokens[0]);
+                this.hostName = tokens[1];
+                this.port = Integer.parseInt(tokens[2]);
 			}
+            catch (Exception e) { throwKVE("Registration Error: Received unparseable slave information"); }
 		}
 		
-		public long getSlaveID() {
-			return slaveID;
-		}
-		
+        //Helper Methods
+		public long getSlaveID() { return slaveID; }
+        public String getHostName() { return hostName; }
+        public int getPort() { return port; }
+
+        //Action Methods
 		public Socket connectHost() throws KVException {
-		    // TODO: Optional Implement Me!
+            Socket socket = null;
 			try {
-				return new Socket(this.hostName, this.port);
-			} catch (Exception e) {
-				return null;
+				socket = new Socket(this.hostName, this.port);
 			}
+            catch (Exception e) { throwKVE("Network Error: Could not connect"); }
+            return socket;
 		}
 		
 		public void closeHost(Socket sock) throws KVException {
-		    // TODO: Optional Implement Me!
 			try {
 				sock.close();
-			} catch (Exception e) {
-				// do nothing
 			}
+            catch (Exception e) { throwKVE("Unknown Error: Could not close socket"); }
 		}
 	}
 	
