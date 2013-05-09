@@ -355,22 +355,7 @@ public class TPCMaster {
 			response = this.communicateToSlave(first, request);
 
 			if (response.getMsgType().equals("abort")) {
-				while(true) {
-					try {
-						// second phase
-						request = new KVMessage("abort");
-						request.setTpcOpId(nextTpcOpId);
-						
-						response = this.communicateToSlave(first, request);
-					
-						if (response.getMsgType().equals("ack")) {
-							// ack received, exit
-							break;
-						}
-					} catch (KVException e) {
-						// retry...
-					}
-				}
+				throw new KVException(new KVMessage("resp", "first server aborted"));
 			}
 			else {
 				response = this.communicateToSlave(second, request);
@@ -419,7 +404,35 @@ public class TPCMaster {
 				}
 			}
 		} catch (KVException e) {
-			throw e;
+			request = new KVMessage("abort");
+			boolean firstReceived = false;
+			boolean secondReceived = false;
+			while (true) {
+				try {
+					// second phase
+					if (!firstReceived) {
+						response = this.communicateToSlave(first, request);
+					
+						if (response.getMsgType().equals("ack")) {
+							// ack received from first slave
+							firstReceived = true;
+						}
+					}
+					if (!secondReceived) {
+						response = this.communicateToSlave(second, request);
+					
+						if (response.getMsgType().equals("ack")) {
+							// ack received from second slave
+							secondReceived = true;
+						}
+					}
+					if (firstReceived && secondReceived) {
+						break;
+					}
+				} catch (KVException e2) {
+					// retry...
+				}
+			}
 		} finally {
 			writeLock.unlock();
 		}
@@ -499,6 +512,11 @@ public class TPCMaster {
 		} catch (KVException e) {
 			throw e;
 		} finally {
+			// put toReturn into masterCache if it has value
+			if (toReturn != null) {
+				masterCache.put(key, toReturn);
+			}
+			
 			getLock.lock();
 			numGetter--;
 			if (numGetter == 0)
