@@ -209,52 +209,45 @@ public class KVMessage implements Serializable {
 			NodeList messageList = root.getElementsByTagName("Message");
             NodeList tpcOpIdList = root.getElementsByTagName("TPCOpId");
 
-            switch (this.msgType) {
-                case "getreq":
-                    this.key = this.validNodeList(keyList);
-                    break;
-                case "putreq":
+            if (this.msgType.equals("getreq"))
+                this.key = this.validNodeList(keyList);
+            else if (this.msgType.equals("putreq")) {
+                this.key = this.validNodeList(keyList);
+                this.value = this.validNodeList(valueList);
+                if (tpcOpIdList.getLength()==1)
+                    this.tpcOpId = this.validNodeList(tpcOpIdList);
+            }
+            else if (this.msgType.equals("delreq")) {
+                this.key = this.validNodeList(keyList);
+                if (tpcOpIdList.getLength()==1)
+                    this.tpcOpId = this.validNodeList(tpcOpIdList);
+            }
+            else if (this.msgType.equals("resp")) {
+                if (messageList.getLength() == 0) {
                     this.key = this.validNodeList(keyList);
                     this.value = this.validNodeList(valueList);
-                    if (tpcOpIdList.getLength()==1)
-                        this.tpcOpId = this.validNodeList(tpcOpIdList);
-                    break;
-                case "delreq":
-                    this.key = this.validNodeList(keyList);
-                    if (tpcOpIdList.getLength()==1)
-                        this.tpcOpId = this.validNodeList(tpcOpIdList);
-                    break;
-                case "resp":
-                    if (messageList.getLength() == 0) {
-                        this.key = this.validNodeList(keyList);
-                        this.value = this.validNodeList(valueList);
-                    }
-                    else
-                        this.message = this.validNodeList(messageList);
-                    break;
-                case "abort":
-                	if (messageList.getLength()==1)
-                        this.message = this.validNodeList(messageList);
-                    this.tpcOpId = this.validNodeList(tpcOpIdList);
-                    break;
-                case "commit":
-                    this.tpcOpId = this.validNodeList(tpcOpIdList);
-                    break;
-                case "ready":
-                    this.tpcOpId = this.validNodeList(tpcOpIdList);
-                    break;
-                case "ack":
-                    this.tpcOpId = this.validNodeList(tpcOpIdList);
-                    break;
-                case "register":
+                }
+                else
                     this.message = this.validNodeList(messageList);
-                    break;
-                case "ignoreNext":
-                    // TODO
-                    break;
-                default:
-				    throwKVE("Message format incorrect");
-			}
+            }
+            else if (this.msgType.equals("abort")) {
+                if (messageList.getLength()==1)
+                    this.message = this.validNodeList(messageList);
+                this.tpcOpId = this.validNodeList(tpcOpIdList);
+            }
+            else if (this.msgType.equals("commit"))
+                this.tpcOpId = this.validNodeList(tpcOpIdList);
+            else if (this.msgType.equals("ready"))
+                this.tpcOpId = this.validNodeList(tpcOpIdList);
+            else if (this.msgType.equals("ack"))
+                this.tpcOpId = this.validNodeList(tpcOpIdList);
+            else if (this.msgType.equals("register"))
+                this.message = this.validNodeList(messageList);
+            else if (this.msgType.equals("ignoreNext")) {
+                //TODO: implement me
+            }
+            else
+                throwKVE("Message format incorrect");
 		}
 		catch (ParserConfigurationException e) { throwKVE("XML Error: Received unparseable message"); }
 		catch (SAXException e) { throwKVE("XML Error: Received unparseable message"); }
@@ -287,65 +280,63 @@ public class KVMessage implements Serializable {
             Node tpcOpIdText = doc.createTextNode(this.tpcOpId);
 			
 			doc.appendChild(rootElem);
-            switch (this.msgType) {
-                case "getreq":
-                    rootElem.setAttribute("type", "getreq");
-                    this.appendElem(this.key, rootElem, keyElem, keyText);
-                    break;
-                case "putreq":
-                    rootElem.setAttribute("type", "putreq");
+            if (this.msgType.equals("getreq")) {
+                rootElem.setAttribute("type", "getreq");
+                this.appendElem(this.key, rootElem, keyElem, keyText);
+            }
+            else if (this.msgType.equals("putreq")) {
+                rootElem.setAttribute("type", "putreq");
+                this.appendElem(this.key, rootElem, keyElem, keyText);
+                this.appendElem(this.value, rootElem, valueElem, valueText);
+
+                if (this.tpcOpId!=null)
+                    this.appendElem(this.tpcOpId, rootElem, tpcOpIdElem, tpcOpIdText);
+            }
+            else if (this.msgType.equals("delreq")) {
+                rootElem.setAttribute("type", "delreq");
+                this.appendElem(this.key, rootElem, keyElem, keyText);
+
+                if (this.tpcOpId!=null)
+                    this.appendElem(this.tpcOpId, rootElem, tpcOpIdElem, tpcOpIdText);
+            }
+            else if (this.msgType.equals("resp")) {
+                rootElem.setAttribute("type", "resp");
+                if (this.message==null) {
                     this.appendElem(this.key, rootElem, keyElem, keyText);
                     this.appendElem(this.value, rootElem, valueElem, valueText);
-
-                    if (this.tpcOpId!=null)
-                        this.appendElem(this.tpcOpId, rootElem, tpcOpIdElem, tpcOpIdText);
-                    break;
-                case "delreq":
-                    rootElem.setAttribute("type", "delreq");
-                    this.appendElem(this.key, rootElem, keyElem, keyText);
-
-                    if (this.tpcOpId!=null)
-                        this.appendElem(this.tpcOpId, rootElem, tpcOpIdElem, tpcOpIdText);
-                    break;
-                case "resp":
-                    rootElem.setAttribute("type", "resp");
-                    if (this.message==null) {
-                        this.appendElem(this.key, rootElem, keyElem, keyText);
-                        this.appendElem(this.value, rootElem, valueElem, valueText);
-                    }
-                    else
-                        this.appendElem(this.message, rootElem, messageElem, messageText);
-                    break;
-                case "abort":
-                    rootElem.setAttribute("type", "abort");
-                    if (this.message!=null)
-                        this.appendElem(this.message, rootElem, messageElem, messageText);
-                    this.appendElem(this.tpcOpId, rootElem, tpcOpIdElem, tpcOpIdText);
-                    break;
-                case "commit":
-                    rootElem.setAttribute("type", "commit");
-                    this.appendElem(this.tpcOpId, rootElem, tpcOpIdElem, tpcOpIdText);
-                    break;
-                case "ready":
-                    rootElem.setAttribute("type", "ready");
-                    this.appendElem(this.tpcOpId, rootElem, tpcOpIdElem, tpcOpIdText);
-                    break;
-                case "ack":
-                    rootElem.setAttribute("type", "ack");
-                    this.appendElem(this.tpcOpId, rootElem, tpcOpIdElem, tpcOpIdText);
-                    break;
-                case "register":
-                    rootElem.setAttribute("type", "register");
+                }
+                else
                     this.appendElem(this.message, rootElem, messageElem, messageText);
-                    break;
-                case "ignoreNext":
-                    rootElem.setAttribute("type", "ignoreNext");
-                    // TODO
-                    break;
-                default:
-				    throwKVE("Message format incorrect");
-			}
-			
+            }
+            else if (this.msgType.equals("abort")) {
+                rootElem.setAttribute("type", "abort");
+                if (this.message!=null)
+                    this.appendElem(this.message, rootElem, messageElem, messageText);
+                this.appendElem(this.tpcOpId, rootElem, tpcOpIdElem, tpcOpIdText);
+            }
+            else if (this.msgType.equals("commit")) {
+                rootElem.setAttribute("type", "commit");
+                this.appendElem(this.tpcOpId, rootElem, tpcOpIdElem, tpcOpIdText);
+            }
+            else if (this.msgType.equals("ready")) {
+                rootElem.setAttribute("type", "ready");
+                this.appendElem(this.tpcOpId, rootElem, tpcOpIdElem, tpcOpIdText);
+            }
+            else if (this.msgType.equals("ack")) {
+                rootElem.setAttribute("type", "ack");
+                this.appendElem(this.tpcOpId, rootElem, tpcOpIdElem, tpcOpIdText);
+            }
+            else if (this.msgType.equals("register")) {
+                rootElem.setAttribute("type", "register");
+                this.appendElem(this.message, rootElem, messageElem, messageText);
+            }
+            else if (this.msgType.equals("ignoreNext")) {
+                rootElem.setAttribute("type", "ignoreNext");
+                //TODO: implement me
+            }
+            else
+                throwKVE("Message format incorrect");
+
 			DOMSource domSource = new DOMSource(doc);
 			StringWriter stringWriter = new StringWriter();
 			StreamResult streamResult = new StreamResult(stringWriter);
@@ -373,12 +364,12 @@ public class KVMessage implements Serializable {
 		try {
 			socket.getOutputStream().flush();
 		}
-		catch (IOException e) { throwKVE("Unknown Error: Socket is not connected"); }
+		catch (IOException e) { throwKVE("Unknown Error: Could not flush output stream"); }
 		
 		try {
 			socket.shutdownOutput();
 		}
-		catch (IOException e) { throwKVE("Unknown Error: " + e.getLocalizedMessage()); }
+		catch (IOException e) { throwKVE("Unknown Error: Could not shutdown output stream"); }
 	}
 	
 	public void sendMessage(Socket socket, int timeout) throws KVException {
