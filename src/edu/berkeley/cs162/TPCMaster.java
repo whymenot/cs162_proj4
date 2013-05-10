@@ -312,7 +312,7 @@ public class TPCMaster {
 		Socket socket = null;
 		try {
 			socket = si.connectHost();
-			msg.sendMessage(socket);
+			msg.sendMessage(socket, TIMEOUT_MILLISECONDS);
 			try {
 				InputStream is = socket.getInputStream();
 				
