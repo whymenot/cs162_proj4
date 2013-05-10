@@ -39,9 +39,11 @@ import java.net.Socket;
  *
  */
 public class KVClientHandler implements NetworkHandler {
+    //Fields
 	private ThreadPool threadpool = null;
     private TPCMaster tpcMaster = null;
 	
+    //Constructors
 	public KVClientHandler(TPCMaster tpcMaster) {
 		initialize(1, tpcMaster);
 	}

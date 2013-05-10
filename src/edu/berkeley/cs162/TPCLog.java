@@ -73,10 +73,14 @@ public class TPCLog {
 	}
 	
 	public void appendAndFlush(KVMessage entry) {
-		// implement me
-        entries.add(entry);
-        flushToDisk();
-	}
+        msgType = entry.getMsgType();
+        if (msgType.equals("getreq") || msgType.equals("putreq") ||
+            msgType.equals("abort") || msgType.equals("commit")) {
+            loadFromDisk();
+            entries.add(entry);
+            flushToDisk();
+	    }
+    }
 
 	/**
 	 * Load log from persistent storage
@@ -136,37 +140,42 @@ public class TPCLog {
 	 * @throws KVException
 	 */
 	public void rebuildKeyServer() throws KVException {
-		// implement me
-        loadFromDisk();
-        boolean ignore = false;
+        KVMessage request = null;
+        KVMessage response = null;
+        String reqType = null;
+        String respType = null;
+        String reqId = null;
+        String respId = null;
         int i = 0;
-        while (i < entries.size()) {
-            KVMessage operation = entries.get(i);
-            if (operation is ignoreNext) {
-                ignore = !ignore;
-                i+=2;
+        int increment = 1;
+
+        loadFromDisk();
+        while (i+1 < entries.size()) { //entries.size()-1 >= i+1
+            increment = 1;
+            request = entries.get(i);
+            response = entries.get(i+1);
+            reqType = request.getMsgType();
+            respType = response.getMsgType();
+            reqId = request.getTpcOpId();
+            respId = response.getTpcOpId();
+
+            if (respType.equals("commit") {
+                if (reqType.equals("putreq") && reqId.equals(respId))
+                    kvServer.put(request.getKey(), request.getValue());
+                if (reqType.equals("delreq") && reqId.equals(respId))
+                    kvServer.del(request.getKey());
+                increment = 2;
             }
-            else if (ignore == true) {
-                i += 4;
-                ignore = false;
-            }
-            else if (i + 3 >= entries.size()) {
-                interruptedTpcOperation = operation;
-                i = entries.size();
-            }
-            else {
-                KVMessage response = entries.get(i+1);
-                KVMessage decision = entries.get(i+2);
-                KVMessage ack = entries.get(i+3);
-                i += 4;
-                if (decision is commit) {
-                    if (operation is put)
-                        kvServer.put(operation.getKey(), operation.getValue());
-                    else if (operation is del)
-                        kvServer.del(operation.getKey());
-                }
+            i += increment;
+            
+            if (i == entries.size()-1) {
+                KVMessage kvm = entries.get(i);
+                String type = kvm.getMsgType();
+                if (type.equals("putreq") || type.equals("delreq"))
+                    interruptedTpcOperation = kvm;
             }
         }
+        entries = null;
 	}
 	
 	/**
