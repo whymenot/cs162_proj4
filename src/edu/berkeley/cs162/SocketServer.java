@@ -115,7 +115,7 @@ public class SocketServer {
 		try {
 			this.server.close();
 		}
-		catch (IOException e) { throwKVE("Unknown Error: Could not close socket"); }
+		catch (IOException e) { /* Could not close ServerSocket */ }
 	}
 	
 	protected void finalize() {
