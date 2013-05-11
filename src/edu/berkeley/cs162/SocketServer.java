@@ -50,7 +50,7 @@ public class SocketServer {
 	//Constructors
 	public SocketServer(String hostname) {
 		this.hostname = hostname;
-		this.port = -1;
+		this.port = 0;
 	}
 
 	public SocketServer(String hostname, int port) {
@@ -61,6 +61,9 @@ public class SocketServer {
 	//Helper Methods
 	public String getHostname() { return hostname; }
 	public int getPort() { return port; }
+    public void throwKVE(String errorMessage) throws KVException {
+        throw new KVException(new KVMessage("resp", errorMessage));
+    }
 	
 	//Action Methods
 	/**
@@ -69,13 +72,10 @@ public class SocketServer {
 	 * @throws IOException
 	 */
 	public void connect() throws IOException {
-		if (this.port > 0)
-			this.server = new ServerSocket(this.port);
-		else {
-			Random random = new Random();
-			this.port = random.nextInt() + 1; // TODO: range of random int
-			this.server = new ServerSocket(this.port);
-		}
+        //Creates a server socket, bound to the specified port.
+        //A port of 0 creates a socket on any free port.
+        this.server = new ServerSocket(this.port);
+        this.port = server.getLocalPort();
 	}
 
 	/**
@@ -86,11 +86,13 @@ public class SocketServer {
 		if (this.handler == null) return;
 		
 		while (true) {
-			try {
-				Socket clientSocket = this.server.accept();
-				this.handler.handle(clientSocket);
-			}
-			catch (IOException e) { throw e; }
+            try {
+                Socket socket = this.server.accept();
+                this.handler.handle(socket);
+            }
+            catch (Exception e) {
+                this.connect();
+            }
 		}
 	}
 	
@@ -106,19 +108,17 @@ public class SocketServer {
 	 * Stop the ServerSocket
 	 */
 	public void stop() {
-		finalize();
+		this.finalize();
 	}
 	
 	private void closeSocket() {
 		try {
 			this.server.close();
 		}
-		catch (IOException e) {
-			//error message 
-		}
+		catch (IOException e) { throwKVE("Unknown Error: Could not close socket"); }
 	}
 	
-	protected void finalize(){
-		closeSocket();
+	protected void finalize() {
+		this.closeSocket();
 	}
 }
