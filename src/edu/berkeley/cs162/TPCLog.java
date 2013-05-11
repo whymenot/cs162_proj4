@@ -37,23 +37,18 @@ import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 
 public class TPCLog {
-
-	// Path to log file
-	private String logPath = null;
-	// Reference to the KVServer of this slave. Populated by rebuildKeyServer()
-	private KVServer kvServer = null;
-
-	// Log entries
-	private ArrayList<KVMessage> entries = null;
-	
+    //Fields
+	private String logPath = null; // Path to log file
+	private KVServer kvServer = null; // Reference to the KVServer of this slave. Populated by rebuildKeyServer()
+	private ArrayList<KVMessage> entries = null; // Log entries
+	private KVMessage interruptedTpcOperation = null;
 	/*  Keeps track of the interrupted 2PC operation.
 	 There can be at most one, i.e., when the last 2PC operation before
 	 crashing was in READY state.
 	 Set in  rebuildKeyServer() during recovery */ 
-	private KVMessage interruptedTpcOperation = null;
 	
+    //Constructor
 	/**
-	 * 
 	 * @param logPath 
 	 * @param kvServer Reference to the KVServer of this slave. Populated by
 	 * rebuildKeyServer() during start. 
@@ -64,6 +59,7 @@ public class TPCLog {
 		this.kvServer = kvServer;
 	}
 
+    //Helper Methods
 	public ArrayList<KVMessage> getEntries() {
 		return entries;
 	}
@@ -71,7 +67,14 @@ public class TPCLog {
 	public boolean empty() {
 		return (entries.size() == 0);
 	}
+
+    public void setInterruptedTpcOperation(KVMessage kvm) {
+        String type = kvm.getMsgType();
+        if (type.equals("putreq") || type.equals("delreq"))
+            interruptedTpcOperation = kvm;
+    }
 	
+    //Action Methods
 	public void appendAndFlush(KVMessage entry) {
         msgType = entry.getMsgType();
         if (msgType.equals("getreq") || msgType.equals("putreq") ||
@@ -150,6 +153,8 @@ public class TPCLog {
         int increment = 1;
 
         loadFromDisk();
+        if (entries.size() == 1)
+            setInterruptedTpcOperation(entries.get(i));
         while (i+1 < entries.size()) { //entries.size()-1 >= i+1
             increment = 1;
             request = entries.get(i);
@@ -168,18 +173,12 @@ public class TPCLog {
             }
             i += increment;
             
-            if (i == entries.size()-1) {
-                KVMessage kvm = entries.get(i);
-                String type = kvm.getMsgType();
-                if (type.equals("putreq") || type.equals("delreq"))
-                    interruptedTpcOperation = kvm;
-            }
+            if (i == entries.size()-1)
+                setInterruptedTpcOperation(entries.get(i));
         }
-        entries = null;
 	}
 	
 	/**
-	 * 
 	 * @return Interrupted 2PC operation, if any 
 	 */
 	public KVMessage getInterruptedTpcOperation() { 
@@ -189,7 +188,6 @@ public class TPCLog {
 	}
 	
 	/**
-	 * 
 	 * @return True if TPCLog contains an interrupted 2PC operation
 	 */
 	public boolean hasInterruptedTpcOperation() {
