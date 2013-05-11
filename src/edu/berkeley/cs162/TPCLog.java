@@ -143,6 +143,9 @@ public class TPCLog {
 	 * @throws KVException
 	 */
 	public void rebuildKeyServer() throws KVException {
+		if (entries == null)
+			return;
+		
         KVMessage request = null;
         KVMessage response = null;
         String reqType = null;
