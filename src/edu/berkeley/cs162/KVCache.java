@@ -28,9 +28,24 @@
  *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+//package edu.berkeley.cs162;
 package edu.berkeley.cs162;
 
+import java.io.StringWriter;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.soap.Node;
+import javax.xml.stream.XMLStreamWriter;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Text;
 
 
 /**
@@ -41,7 +56,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 public class KVCache implements KeyValueInterface {	
 	private int numSets = 100;
 	private int maxElemsPerSet = 10;
-		
+	private KVCacheSet[] sets;
+
 	/**
 	 * Creates a new LRU cache.
 	 * @param cacheSize	the maximum number of entries that will be kept in this cache.
@@ -50,6 +66,10 @@ public class KVCache implements KeyValueInterface {
 		this.numSets = numSets;
 		this.maxElemsPerSet = maxElemsPerSet;     
 		// TODO: Implement Me!
+		this.sets = new KVCacheSet[numSets];
+		for(int i = 0; i<numSets; i++){
+			sets[i] = new KVCacheSet(this.maxElemsPerSet);
+		}
 	}
 
 	/**
@@ -64,10 +84,10 @@ public class KVCache implements KeyValueInterface {
 		AutoGrader.agCacheGetDelay();
         
 		// TODO: Implement Me!
-		
+		String getResult = sets[getSetId(key)].get(key);
 		// Must be called before returning
 		AutoGrader.agCacheGetFinished(key);
-		return null;
+		return getResult;
 	}
 
 	/**
@@ -85,10 +105,9 @@ public class KVCache implements KeyValueInterface {
 		AutoGrader.agCachePutDelay();
 
 		// TODO: Implement Me!
-		
+		boolean putResult = sets[getSetId(key)].put(key,value);
 		// Must be called before returning
 		AutoGrader.agCachePutFinished(key, value);
-		return;
 	}
 
 	/**
@@ -102,7 +121,7 @@ public class KVCache implements KeyValueInterface {
 		AutoGrader.agCacheDelDelay();
 		
 		// TODO: Implement Me!
-		
+		sets[getSetId(key)].del(key);
 		// Must be called before returning
 		AutoGrader.agCacheDelFinished(key);
 	}
@@ -112,8 +131,7 @@ public class KVCache implements KeyValueInterface {
 	 * @return	the write lock of the set that contains key.
 	 */
 	public WriteLock getWriteLock(String key) {
-	    // TODO: Implement Me!
-	    return null;
+		return sets[getSetId(key)].getWriteLock();
 	}
 	
 	/**
@@ -122,11 +140,50 @@ public class KVCache implements KeyValueInterface {
 	 * @return	set of the key
 	 */
 	private int getSetId(String key) {
-		return (key.hashCode() & 0x7FFFFFFF) % numSets;
+		return Math.abs(key.hashCode()) % numSets;
 	}
 	
-    public String toXML() {
-        // TODO: Implement Me!
-        return null;
-    }
+	public String toXML() throws KVException {
+		try { 
+			DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
+			DocumentBuilder docBuilder = docFactory.newDocumentBuilder();
+			Document doc = docBuilder.newDocument();
+			Element rElem, sElem, pElem, kElem, vElem;
+			Text kValue;
+			Text vValue;
+			rElem = doc.createElement("KVCache");
+			doc.appendChild(rElem);
+			for (int i =0; i < sets.length; i++) {
+				KVCacheSet set = sets[i];
+				sElem = doc.createElement("Set");
+				sElem.setAttribute("Id", String.valueOf(i)); //we need the String of key for set id
+				for (String key: set.entries.keySet()) {
+					pElem = doc.createElement("KVPair");
+					//Key
+		            kValue = doc.createTextNode(key);
+		            kElem = doc.createElement("Key");
+		            kElem.appendChild(kValue);
+		            pElem.appendChild(kElem);
+		            //Value
+		            vValue = doc.createTextNode(set.entries.get(key).getData());
+		            vElem = doc.createElement("Value");
+		            vElem.appendChild(vValue);
+					pElem.appendChild(vElem);
+					sElem.appendChild(pElem);
+				}
+				//Append pair to root
+	            rElem.appendChild(sElem);	
+			}
+			DOMSource domSource = new DOMSource(doc);
+	        StringWriter stringWriter = new StringWriter();
+	        StreamResult streamResult = new StreamResult(stringWriter);
+	        TransformerFactory transformerFactory = TransformerFactory.newInstance();
+	        Transformer transformer = transformerFactory.newTransformer();
+	        transformer.transform(domSource, streamResult);
+	        return stringWriter.toString();
+		}
+	    catch (Exception e) {
+	    	throw new KVException(new KVMessage("resp", "Error during KVCache toXML"));
+	    }  
+	}
 }
