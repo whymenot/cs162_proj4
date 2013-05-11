@@ -47,30 +47,20 @@ public class KVClientHandler implements NetworkHandler {
 	public KVClientHandler(TPCMaster tpcMaster) {
 		initialize(1, tpcMaster);
 	}
-
 	public KVClientHandler(int connections, TPCMaster tpcMaster) {
 		initialize(connections, tpcMaster);
 	}
-
+	
+    //Helper Methods
 	private void initialize(int connections, TPCMaster tpcMaster) {
 		threadpool = new ThreadPool(connections);
         this.tpcMaster = tpcMaster; 
 	}
-	
+    public void throwKVE(String errorMessage) throws KVException {
+        throw new KVException(new KVMessage("resp", errorMessage));
+    }
 
-	private class ClientHandler implements Runnable {
-		private Socket client = null;
-		
-		@Override
-		public void run() {
-			// TODO: Implement Me!
-		}
-		
-		public ClientHandler(Socket client) {
-			this.client = client;
-		}
-	}
-	
+    //Action Methods
 	/* (non-Javadoc)
 	 * @see edu.berkeley.cs162.NetworkHandler#handle(java.net.Socket)
 	 */
@@ -79,9 +69,51 @@ public class KVClientHandler implements NetworkHandler {
 		Runnable r = new ClientHandler(client);
 		try {
 			threadpool.addToQueue(r);
-		} catch (InterruptedException e) {
+		}
+        catch (InterruptedException e) {
 			// Ignore this error
 			return;
+		}
+	}
+
+    //Class
+	private class ClientHandler implements Runnable {
+        //Fields
+		private Socket socket = null;
+
+        //Constructor
+		public ClientHandler(Socket client) {
+			this.client = client;
+		}
+		
+        //Action Methods
+		@Override
+		public void run() {
+            KVMessage request = null;
+            KVMessage response = new KVMessage("resp", "Success");
+            try {
+                request = new KVMessage(this.socket);
+                response = new KVMessage("resp");
+                String reqType = request.getMsgType();
+                if(reqType.equals("getreq")) {
+                    response.setKey(request.getKey());
+                    response.setValue(kvServer.get(request.getKey()));
+                    response.setMessage(null);
+                }
+                else if(reqType.equals("putreq"))
+                    kvServer.put(request.getKey(), request.getValue());
+                else if(type.equals("delreq"))
+                    kvServer.del(request.getKey());
+                else
+                    throwKVE("Unknown Error: Invalid Request Type");
+                response.sendMessage(client);
+            }
+            catch (KVException e) {
+                try {
+                	e.getMsg().sendMessage(client);
+                }
+                catch (KVException e1) {}
+            }
 		}
 	}
 }
