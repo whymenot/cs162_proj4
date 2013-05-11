@@ -272,15 +272,27 @@ public class TPCMasterHandler implements NetworkHandler {
 		 */
 		private void handleMasterResponse(KVMessage masterResp, KVMessage origMsg, boolean origAborted) {
 			AutoGrader.agSecondPhaseStarted(slaveID, origMsg, origAborted);
-			
+			//need to not handle same request twice by checking if an ack was sent
 			// Implement me
 			tpcLog.appendAndFlush(masterResp); 
 			if(!origAborted) {
 				if(masterResp.getMsgType().equals("commit")) {
 					if(origMsg.getMsgType().equals("delreq")) {
-						//Delete
+						String key = origMsg.getKey();
+						try{
+							kvServer.del(key);
+						}catch(KVException e){
+							
+						}
 					} else if(origMsg.getMsgType().equals("putreq")){
-						//Put
+						String key = origMsg.getKey();
+						String value = origMsg.getValue();
+						
+						try{
+							kvServer.put(key, value);
+						}catch(KVException e){
+							
+						}
 					} else {
 						//ignore
 					}
@@ -310,6 +322,7 @@ public class TPCMasterHandler implements NetworkHandler {
 		try {
 			threadpool.addToQueue(r);
 		} catch (InterruptedException e) {
+			client.close();
 			// TODO: HANDLE ERROR
 			return;
 		}		
