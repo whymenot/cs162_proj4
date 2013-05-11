@@ -30,8 +30,33 @@
  *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 package edu.berkeley.cs162;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.StringWriter;
+
 import java.util.Dictionary;
+import java.util.Enumeration;
 import java.util.Hashtable;
+import java.util.List;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.soap.Node;
+import javax.xml.stream.events.XMLEvent;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+import org.w3c.dom.Text;
+
+import org.xml.sax.SAXException;
 
 
 /**
@@ -41,16 +66,21 @@ import java.util.Hashtable;
  *
  */
 public class KVStore implements KeyValueInterface {
-	private Dictionary<String, String> store 	= null;
+    //Fields
+	private Dictionary<String, String> store = null;
 	
+    //Constructor
 	public KVStore() {
 		resetStore();
 	}
 
-	private void resetStore() {
-		store = new Hashtable<String, String>();
-	}
+    //Helper Methods
+	private void resetStore() { store = new Hashtable<String, String>(); }
+	private void getDelay() { AutoGrader.agStoreDelay(); }
+	private void putDelay() { AutoGrader.agStoreDelay(); }
+	private void delDelay() { AutoGrader.agStoreDelay(); }
 	
+    //Action Methods
 	public void put(String key, String value) throws KVException {
 		AutoGrader.agStorePutStarted(key, value);
 		
@@ -94,28 +124,98 @@ public class KVStore implements KeyValueInterface {
 		}
 	}
 	
-	private void getDelay() {
-		AutoGrader.agStoreDelay();
-	}
-	
-	private void putDelay() {
-		AutoGrader.agStoreDelay();
-	}
-	
-	private void delDelay() {
-		AutoGrader.agStoreDelay();
-	}
-	
     public String toXML() throws KVException {
-        // TODO: implement me
-        return null;
-    }        
+    	try { 
+    		DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
+    		DocumentBuilder docBuilder = docFactory.newDocumentBuilder();
+    		Document doc = docBuilder.newDocument();
+    		Element rElem, pElem, kElem, vElem;
+    		Text kValue;
+			Text vValue;
+    		rElem = doc.createElement("KVStore");
+    		doc.appendChild(rElem);
+    		Enumeration<String> keys = store.keys();
+    		while (keys.hasMoreElements()) {
+    			String key = keys.nextElement();
+    			pElem = doc.createElement("KVPair");
+    			//Key
+                kValue = doc.createTextNode(key);
+                kElem = doc.createElement("Key");
+                kElem.appendChild(kValue);
+                pElem.appendChild(kElem);
+                //Value
+                vValue = doc.createTextNode(store.get(key));
+                vElem = doc.createElement("Value");
+                vElem.appendChild(vValue);
+    			pElem.appendChild(vElem);
+    			//Append pair to root
+                rElem.appendChild(pElem);	
+    		}
+    		DOMSource domSource = new DOMSource(doc);
+            StringWriter stringWriter = new StringWriter();
+            StreamResult streamResult = new StreamResult(stringWriter);
+            TransformerFactory transformerFactory = TransformerFactory.newInstance();
+            Transformer transformer = transformerFactory.newTransformer();
+            transformer.transform(domSource, streamResult);
+            return stringWriter.toString();
+    	}
+        catch (Exception e) {
+        	throw new KVException(new KVMessage("resp", "Error during KVStore toXML"));
+        }
+    }     
 
     public void dumpToFile(String fileName) throws KVException {
-        // TODO: implement me
+    	FileWriter fw = null;
+    	try {
+    		String xmlString = this.toXML();
+    		File xmlFile = new File (fileName);
+    		fw = new FileWriter(xmlFile);
+    		fw.write(xmlString);
+    		fw.close();
+    	}
+    	catch (Exception e) {
+    		throw new KVException (new KVMessage("IO Error"));
+    	}
+    	return;
     }
-
-    public void restoreFromFile(String fileName) throws KVException{
-        // TODO: implement me
+    		
+    public void restoreFromFile(String fileName) throws Exception {
+        File f = new File(fileName);
+        if (!f.exists() || !f.canRead()) {
+            throw new IOException(fileName + " could not be opened");
+        }
+        Document doc;
+        try {
+            DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+            DocumentBuilder docBuilder = dbf.newDocumentBuilder();
+            doc = docBuilder.parse(f);
+	        if (!doc.getXmlEncoding().equals("UTF-8")) {
+	            throw new KVException(new KVMessage("resp", "Unknown Error: Incorrect XML char encoding."));
+	        }
+	        NodeList nodes = doc.getElementsByTagName("KVStore");
+	        if (nodes.getLength() != 1) {
+	            throw new KVException(new KVMessage("resp", "Unknown Error: XML format incorrect"));
+	        }
+	        Hashtable<String, String> newstore = new Hashtable<String, String>();
+	        // Restore K-V pairs
+	        NodeList pairNodes = ((Element)nodes.item(0)).getElementsByTagName("KVPair");
+	        Element pElem, kElem, vElem;
+	        for (int i = 0; i < pairNodes.getLength(); i++) {
+	        	pElem = (Element) pairNodes.item(i);
+	        	kElem = (Element) pElem.getElementsByTagName("Key").item(0);
+	        	vElem = (Element) pElem.getElementsByTagName("Value").item(0);
+	        	newstore.put (kElem.getFirstChild().getNodeValue(), vElem.getFirstChild().getNodeValue());
+	        }
+	        store = newstore;
+        } catch (IOException ioe) {
+            throw new KVException(new KVMessage("resp", "I/O Error during restoreFromFile"));
+        } catch (SAXException se){
+            throw new KVException(new KVMessage("resp", "XML Error during restoreFromFile"));
+        } catch (IllegalArgumentException iae) {
+            throw new KVException(new KVMessage("resp", fileName + " is null..."));
+        } catch (ParserConfigurationException pce) {
+            throw new KVException(new KVMessage("resp", "Unknown Error: ParserConfigurationException"));
+        }
+        return;
     }
 }
