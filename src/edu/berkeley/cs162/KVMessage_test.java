@@ -160,7 +160,7 @@ public class KVMessage_test {
 			assertTrue(false);
 		}
 	}
-	/*
+	
 	@Test
 	public void sendMessage() {
 		Thread client = new Thread() {
@@ -260,5 +260,4 @@ public class KVMessage_test {
 			e.printStackTrace();
 		}
 	}
-*/
 }
