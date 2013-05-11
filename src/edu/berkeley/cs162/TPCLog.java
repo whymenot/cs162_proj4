@@ -76,7 +76,7 @@ public class TPCLog {
 	
     //Action Methods
 	public void appendAndFlush(KVMessage entry) {
-        msgType = entry.getMsgType();
+        String msgType = entry.getMsgType();
         if (msgType.equals("getreq") || msgType.equals("putreq") ||
             msgType.equals("abort") || msgType.equals("commit")) {
             loadFromDisk();
@@ -164,7 +164,7 @@ public class TPCLog {
             reqId = request.getTpcOpId();
             respId = response.getTpcOpId();
 
-            if (respType.equals("commit") {
+            if (respType.equals("commit")) {
                 if (reqType.equals("putreq") && reqId.equals(respId))
                     kvServer.put(request.getKey(), request.getValue());
                 if (reqType.equals("delreq") && reqId.equals(respId))

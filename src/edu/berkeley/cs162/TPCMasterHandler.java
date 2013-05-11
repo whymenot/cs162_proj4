@@ -179,17 +179,86 @@ public class TPCMasterHandler implements NetworkHandler {
  			AutoGrader.agGetStarted(slaveID);
 			
  			// Implement me
- 			
+ 			if (key.length() > 256) {
+ 				try{
+ 					KVMessage respMsg = new KVMessage("resp", "Oversized key");
+ 					respMsg.sendMessage(client);
+ 				} catch(KVException e) {
+ 					//TODO: need to figure out how to deal with these exceptions
+ 				}
+ 			}
+ 			else if (!kvServer.hasKey(key)) {
+ 				try {
+	 				KVMessage respMsg = new KVMessage("resp", "Does Not Exist");
+	 				respMsg.sendMessage(client);
+ 				} catch(KVException e) {
+ 					//TODO: need to figure out how to deal with these exceptions
+ 				}
+ 			}
+ 			else {
+ 				try {
+	 				KVMessage respMsg = new KVMessage("resp");
+	 				//TODO: Set appropriate key and value for respMsg (Part III);
+	 				respMsg.sendMessage(client);
+ 				} catch(KVException e) {
+ 					//TODO: need to figure out how to deal with these exceptions
+ 				}
+ 			}
  			AutoGrader.agGetFinished(slaveID);
 		}
 		
 		private void handleDel(KVMessage msg, String key) {
 			AutoGrader.agTPCDelStarted(slaveID, msg, key);
 
+			tpcLog.appendAndFlush(msg); // should this be original message?
 			// Store for use in the second phase
 			originalMessage = new KVMessage(msg);
 			
 			// Implement me
+			if(ignoreNext == true) {
+				try {
+					KVMessage abortMsg = new KVMessage("abort", "Ignored");
+					abortMsg.setTpcOpId( msg.getTpcOpId() );
+					tpcLog.appendAndFlush(abortMsg); 
+					abortMsg.sendMessage(client);//VOTE-ABORT
+					ignoreNext = false;
+				} catch(KVException e) {
+ 					//TODO: need to figure out how to deal with these exceptions
+ 				}
+			}
+			//Check conditions from Project 3
+			else if(key.length() > 256 || originalMessage.getValue().length() > 256 * 1024) {
+				try {
+					KVMessage abortMsg = new KVMessage("abort", "Oversized key");
+					abortMsg.setTpcOpId( msg.getTpcOpId() );
+					tpcLog.appendAndFlush(abortMsg);
+					abortMsg.sendMessage(client);//VOTE-ABORT
+				} catch(KVException e) {
+ 					//TODO: need to figure out how to deal with these exceptions
+ 				}
+			}
+			else if(!kvServer.hasKey(key)) {
+				try {
+					KVMessage abortMsg = new KVMessage("abort", "No such key");
+					abortMsg.setTpcOpId( msg.getTpcOpId() );
+					tpcLog.appendAndFlush(abortMsg);
+					abortMsg.sendMessage( client );//VOTE-ABORT
+				} catch(KVException e) {
+ 					//TODO: need to figure out how to deal with these exceptions
+ 				}
+			}
+			else {
+				try {
+					aborted = false;
+					KVMessage readyMsg = new KVMessage("ready");
+					readyMsg.setTpcOpId( msg.getTpcOpId() );
+					tpcLog.appendAndFlush(readyMsg);
+					readyMsg.sendMessage(client);//VOTE-COMMIT
+				} catch(KVException e) {
+ 					//TODO: need to figure out how to deal with these exceptions
+ 				}
+			}
+
 			
 			AutoGrader.agTPCDelFinished(slaveID, msg, key);
 		}
@@ -205,6 +274,25 @@ public class TPCMasterHandler implements NetworkHandler {
 			AutoGrader.agSecondPhaseStarted(slaveID, origMsg, origAborted);
 			
 			// Implement me
+			tpcLog.appendAndFlush(masterResp); 
+			if(!origAborted) {
+				if(masterResp.getMsgType().equals("commit")) {
+					if(origMsg.getMsgType().equals("delreq")) {
+						//Delete
+					} else if(origMsg.getMsgType().equals("putreq")){
+						//Put
+					} else {
+						//ignore
+					}
+				}
+			}
+			try {
+				KVMessage ackMsg = new KVMessage("ack");
+				ackMsg.setTpcOpId( masterResp.getTpcOpId() );
+				ackMsg.sendMessage( client );
+			} catch(KVException e) {
+				//TODO: figure out what to do with these exceptions
+			}
 			
 			AutoGrader.agSecondPhaseFinished(slaveID, origMsg, origAborted);
 		}
