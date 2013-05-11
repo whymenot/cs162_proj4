@@ -83,34 +83,34 @@ public class KVClientHandler implements NetworkHandler {
 
         //Constructor
 		public ClientHandler(Socket client) {
-			this.client = client;
+			this.socket = client;
 		}
 		
         //Action Methods
 		@Override
 		public void run() {
             KVMessage request = null;
-            KVMessage response = new KVMessage("resp", "Success");
+            KVMessage response = null;
             try {
                 request = new KVMessage(this.socket);
                 response = new KVMessage("resp");
                 String reqType = request.getMsgType();
                 if(reqType.equals("getreq")) {
                     response.setKey(request.getKey());
-                    response.setValue(kvServer.get(request.getKey()));
+                    response.setValue(tpcMaster.handleGet(request));
                     response.setMessage(null);
                 }
                 else if(reqType.equals("putreq"))
-                    kvServer.put(request.getKey(), request.getValue());
-                else if(type.equals("delreq"))
-                    kvServer.del(request.getKey());
+                    tpcMaster.performTPCOperation(request, true);
+                else if(reqType.equals("delreq"))
+                    tpcMaster.performTPCOperation(request, false);
                 else
                     throwKVE("Unknown Error: Invalid Request Type");
-                response.sendMessage(client);
+                response.sendMessage(socket);
             }
             catch (KVException e) {
                 try {
-                	e.getMsg().sendMessage(client);
+                	e.getMsg().sendMessage(socket);
                 }
                 catch (KVException e1) {}
             }
