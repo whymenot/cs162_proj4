@@ -195,7 +195,7 @@ public class TPCMasterHandler implements NetworkHandler {
  			}
  			else if (!kvServer.hasKey(key)) {
  				try {
-	 				KVMessage respMsg = new KVMessage("resp", "Does Not Exist");
+	 				KVMessage respMsg = new KVMessage("resp", "Does not exist");
 	 				respMsg.sendMessage(client);
  				} catch(KVException e) {
  					//TODO: need to figure out how to deal with these exceptions
@@ -204,6 +204,8 @@ public class TPCMasterHandler implements NetworkHandler {
  			else {
  				try {
 	 				KVMessage respMsg = new KVMessage("resp");
+	 				respMsg.setKey(key);
+	 				respMsg.setValue(kvServer.get(key));
 	 				//TODO: Set appropriate key and value for respMsg (Part III);
 	 				respMsg.sendMessage(client);
  				} catch(KVException e) {
@@ -220,6 +222,13 @@ public class TPCMasterHandler implements NetworkHandler {
 			// Store for use in the second phase
 			originalMessage = new KVMessage(msg);
 			
+			try {
+				System.out.println("OriginalMessage : " + originalMessage.toXML());
+			} catch (KVException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
+			
 			// Implement me
 			if(ignoreNext == true) {
 				try {
@@ -233,7 +242,7 @@ public class TPCMasterHandler implements NetworkHandler {
  				}
 			}
 			//Check conditions from Project 3
-			else if(key.length() > 256 || originalMessage.getValue().length() > 256 * 1024) {
+			else if(key.length() > 256) {
 				try {
 					KVMessage abortMsg = new KVMessage("abort", "Oversized key");
 					abortMsg.setTpcOpId( msg.getTpcOpId() );
@@ -245,7 +254,7 @@ public class TPCMasterHandler implements NetworkHandler {
 			}
 			else if(!kvServer.hasKey(key)) {
 				try {
-					KVMessage abortMsg = new KVMessage("abort", "No such key");
+					KVMessage abortMsg = new KVMessage("abort", "Does not exist");
 					abortMsg.setTpcOpId( msg.getTpcOpId() );
 					tpcLog.appendAndFlush(abortMsg);
 					abortMsg.sendMessage( client );//VOTE-ABORT
