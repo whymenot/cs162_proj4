@@ -85,10 +85,16 @@ public class TPCMasterHandler implements NetworkHandler {
 		public void run() {
 			// Receive message from client
 			// Implement me
-			KVMessage msg = null;
+			KVMessage msg =null;
 
+			try{
+				
+				msg = new KVMessage(client.getInputStream());
+			}catch(KVException e){System.out.println("exceptionKV");
+			}catch(IOException e){System.out.println("exceptionIO");}
 			// Parse the message and do stuff 
 			String key = msg.getKey();
+
 			
 			if (msg.getMsgType().equals("putreq")) {
 				handlePut(msg, key);
@@ -133,11 +139,11 @@ public class TPCMasterHandler implements NetworkHandler {
 
 		private void handlePut(KVMessage msg, String key) {
 			AutoGrader.agTPCPutStarted(slaveID, msg, key);
+			System.out.println("hi");
 			//write to log and set message
 			tpcLog.appendAndFlush(msg); //TODO: check if already written to log
 			// Store for use in the second phase
 			originalMessage = new KVMessage(msg);
-			
 			//check for failure
 			if(ignoreNext == true) {
 				try{
