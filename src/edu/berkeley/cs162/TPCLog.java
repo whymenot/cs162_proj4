@@ -184,7 +184,6 @@ public class TPCLog {
 		return logEntry; 
 	}
 	
-
 	/**
 	 * @return True if TPCLog contains an interrupted 2PC operation
 	 */

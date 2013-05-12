@@ -15,8 +15,8 @@ import org.junit.Test;
 
 public class Integration_test {
 	static boolean serversOn = false;
-	Thread thread_slave1 = null;
-	Thread thread_slave2 = null;
+	static Thread thread_slave1 = null;
+	static Thread thread_slave2 = null;
 	@Before
 	public void A_runServers() {
 		System.out.println("Servers are ? : " + serversOn);
@@ -147,7 +147,7 @@ public class Integration_test {
 			Thread.sleep(2000);
 			slave1.start();
 			slave2.start();
-			Thread.sleep(2000);
+			Thread.sleep(10000);
 			System.out.println("Servers are started...");
 			
 			thread_slave1 = slave1;
@@ -460,7 +460,7 @@ public class Integration_test {
 			e.printStackTrace();
 		}
 	}
-	
+	/*
 	@Test
 	public void putTimeOut() {
 		final int server_port = 8080;
@@ -482,7 +482,7 @@ public class Integration_test {
 					request.setKey("sampleKey");
 					request.setValue("sampleValue");
 					
-					thread_slave1.sleep(10000);
+					thread_slave1.sleep(15000);
 					
 					request.sendMessage(socket);
 					
@@ -531,4 +531,5 @@ public class Integration_test {
 			e.printStackTrace();
 		}
 	}
+	*/
 }

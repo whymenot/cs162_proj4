@@ -318,13 +318,14 @@ public class TPCMaster {
 		
 		try {
 			socket = si.connectHost();
-			msg.sendMessage(socket, TIMEOUT_MILLISECONDS);
+			msg.sendMessage(socket);
 			try {
+				socket.setSoTimeout(TIMEOUT_MILLISECONDS);
 				InputStream is = socket.getInputStream();
-				
 				response = new KVMessage(is);
 			} catch (Exception e) {
-				// IO error:
+				// Timeout;
+				throwKVE("Unknow Error: Timeout");
 			}
 
 		} catch (KVException e) {
@@ -336,6 +337,8 @@ public class TPCMaster {
 				// do nothing
 			}
 		}
+		
+		System.out.println("Response is : " + response);
 		return response;
 	}
 	
