@@ -361,6 +361,8 @@ public class TPCMaster {
 		
 		KVMessage request, response;
 		
+		String errMsg = "";
+		
 		if (isPutReq) {
 			// set put operation
 			request = new KVMessage("putreq");
@@ -379,12 +381,15 @@ public class TPCMaster {
 			// first phase
 			response = this.communicateToSlave(first, request);
 			if (response.getMsgType().equals("abort")) {
-				throw new KVException(new KVMessage("resp", "first server aborted"));
+				//<Message>@SlaveServerID1:=ErrorMessage1\n@SlaveServerID2:=ErrorMessage2</Message>
+				errMsg = errMsg + "@" + first.getSlaveID() + ":=" + response.getMessage() + "\n";
+				throw new KVException(new KVMessage("resp", "@" + first.getSlaveID() + ":=" + response.getMessage() + "\n"));
 			}
 			else {
 				response = this.communicateToSlave(second, request);
 				
 				if (response.getMsgType().equals("abort")) { 
+					errMsg = errMsg + "@" + second.getSlaveID() + ":=" + response.getMessage() + "\n";
 					request = new KVMessage("abort");
 				} else {
 					request = new KVMessage("commit");
@@ -460,6 +465,9 @@ public class TPCMaster {
 			}
 		} finally {
 			writeLock.unlock();
+			if (!errMsg.equals("")) {
+				throw new KVException(new KVMessage("resp", errMsg));
+			}
 		}
 		
 		AutoGrader.agPerformTPCOperationFinished(isPutReq);
