@@ -11,12 +11,14 @@ import static org.junit.Assert.*;
 import org.junit.Test;
 
 public class Integration_test {
+	int server_port = 8080;
+	
 	@Test
 	public void put() {
 		Thread client = new Thread() {
 			public void run() {
 				InetAddress server = null;
-				int port = 8080;
+				int port = server_port;
 				Socket socket = null;
 
 				try {
@@ -31,15 +33,22 @@ public class Integration_test {
 					request.setKey("sampleKey");
 					request.setValue("sampleValue");
 					request.sendMessage(socket);
+					
+					System.out.println("client. " + request.toXML());
 
 					is = socket.getInputStream();
+					System.out.println("client. after is");
 					response = new KVMessage(is);
+					System.out.println("Message: "+response.getMessage());
+					System.out.println("client. after response");
+					System.out.println(response.toXML());
 					assertTrue(response.getMsgType().equals("resp")
 							&& response.getMessage().equals("Success"));
 
 					socket.close();
 				}
 				catch (KVException e) {
+					System.out.println("CLIENT ERROR OCCURED");
 					System.out.println(e.getMsg().getMessage());
 				}
 				catch (Exception e) {
@@ -68,7 +77,7 @@ public class Integration_test {
 					
 					// Create KVClientHandler
 					System.out.println("Binding Master(TPCMaster):");
-					server = new SocketServer(InetAddress.getLocalHost().getHostAddress(), 8080);
+					server = new SocketServer(InetAddress.getLocalHost().getHostAddress(), server_port);
 					NetworkHandler handler = new KVClientHandler(tpcMaster);
 					server.addHandler(handler);
 					server.connect();
@@ -168,18 +177,26 @@ public class Integration_test {
 			}
 		};
 
-		TPCserver.start(); // coordination server
-		slave1.start();
-		slave2.start();
-		client.start();
+		TPCserver.setName("TPCServer");
+		slave1.setName("Slave1");
+		slave2.setName("Slave2");
+		client.setName("Client");
+		
+		try {
+			TPCserver.start(); // coordination server
+			Thread.sleep(2000);
+			slave1.start();
+			slave2.start();
+			Thread.sleep(2000);
+			client.start();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
 
 		try {
 			// i have 1 client,
 			// 1 TPCMaster
 			// 2 Slaves.
-			TPCserver.join();
-			slave1.join();
-			slave2.join();
 			client.join();
 		}
 		catch (Exception e) {

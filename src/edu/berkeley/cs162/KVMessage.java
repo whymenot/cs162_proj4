@@ -110,7 +110,6 @@ public class KVMessage implements Serializable {
 		try {
 			InputStream is = socket.getInputStream();
 			this.constructHelper(is);
-			socket.close();
 		}
 		catch (IOException e) { throwKVE("Network Error: Could not receive data"); }
 		catch (KVException e) { throw e; }

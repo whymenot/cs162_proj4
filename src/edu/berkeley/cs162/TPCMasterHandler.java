@@ -85,46 +85,49 @@ public class TPCMasterHandler implements NetworkHandler {
 		public void run() {
 			// Receive message from client
 			// Implement me
-			KVMessage msg = null;
-
-			// Parse the message and do stuff 
-			String key = msg.getKey();
-			
-			if (msg.getMsgType().equals("putreq")) {
-				handlePut(msg, key);
-			}
-			else if (msg.getMsgType().equals("getreq")) {
-				handleGet(msg, key);
-			}
-			else if (msg.getMsgType().equals("delreq")) {
-				handleDel(msg, key);
-			} 
-			else if (msg.getMsgType().equals("ignoreNext")) {
-				// Set ignoreNext to true. PUT and DEL handlers know what to do.
-				// Implement me
-				// Send back an acknowledgment
-				// Implement me
-				ignoreNext = true;
-				try {
-					KVMessage ackMsg = new KVMessage("ack");
-					ackMsg.setTpcOpId(msg.getTpcOpId());
-					ackMsg.sendMessage(client);
-				} catch(KVException e) {
-					//TODO: not sure about this case, maybe should pass along
+			try {
+				KVMessage msg = new KVMessage(client.getInputStream());
+				// Parse the message and do stuff 
+				String key = msg.getKey();
+				
+				if (msg.getMsgType().equals("putreq")) {
+					handlePut(msg, key);
 				}
-			}
-			else if (msg.getMsgType().equals("commit") || msg.getMsgType().equals("abort")) {
-				// Check in TPCLog for the case when SlaveServer is restarted
-				// Implement me
-				if(tpcLog.hasInterruptedTpcOperation())
-					originalMessage = tpcLog.getInterruptedTpcOperation();
-				
-				handleMasterResponse(msg, originalMessage, aborted);
-				
-				// Reset state
-				// Implement me
-				originalMessage = null;
-				aborted = true;
+				else if (msg.getMsgType().equals("getreq")) {
+					handleGet(msg, key);
+				}
+				else if (msg.getMsgType().equals("delreq")) {
+					handleDel(msg, key);
+				} 
+				else if (msg.getMsgType().equals("ignoreNext")) {
+					// Set ignoreNext to true. PUT and DEL handlers know what to do.
+					// Implement me
+					// Send back an acknowledgment
+					// Implement me
+					ignoreNext = true;
+					try {
+						KVMessage ackMsg = new KVMessage("ack");
+						ackMsg.setTpcOpId(msg.getTpcOpId());
+						ackMsg.sendMessage(client);
+					} catch(KVException e) {
+						//TODO: not sure about this case, maybe should pass along
+					}
+				}
+				else if (msg.getMsgType().equals("commit") || msg.getMsgType().equals("abort")) {
+					// Check in TPCLog for the case when SlaveServer is restarted
+					// Implement me
+					if(tpcLog.hasInterruptedTpcOperation())
+						originalMessage = tpcLog.getInterruptedTpcOperation();
+					
+					handleMasterResponse(msg, originalMessage, aborted);
+					
+					// Reset state
+					// Implement me
+					originalMessage = null;
+					aborted = true;
+				}
+			} catch (Exception e) {
+				// ignore
 			}
 			
 			// Finally, close the connection

@@ -93,7 +93,7 @@ public class KVClientHandler implements NetworkHandler {
             KVMessage response = null;
             try {
                 request = new KVMessage(this.socket);
-                response = new KVMessage("resp");
+                response = new KVMessage("resp", "Success");
                 String reqType = request.getMsgType();
                 if(reqType.equals("getreq")) {
                     response.setKey(request.getKey());
