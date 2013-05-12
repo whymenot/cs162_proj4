@@ -85,62 +85,65 @@ public class TPCMasterHandler implements NetworkHandler {
 		public void run() {
 			// Receive message from client
 			// Implement me
-			try {
-				KVMessage msg = new KVMessage(client.getInputStream());
-				// Parse the message and do stuff 
-				String key = msg.getKey();
+			KVMessage msg =null;
+
+			try{
 				
-				if (msg.getMsgType().equals("putreq")) {
-					handlePut(msg, key);
-				}
-				else if (msg.getMsgType().equals("getreq")) {
-					handleGet(msg, key);
-				}
-				else if (msg.getMsgType().equals("delreq")) {
-					handleDel(msg, key);
-				} 
-				else if (msg.getMsgType().equals("ignoreNext")) {
-					// Set ignoreNext to true. PUT and DEL handlers know what to do.
-					// Implement me
-					// Send back an acknowledgment
-					// Implement me
-					ignoreNext = true;
-					try {
-						KVMessage ackMsg = new KVMessage("ack");
-						ackMsg.setTpcOpId(msg.getTpcOpId());
-						ackMsg.sendMessage(client);
-					} catch(KVException e) {
-						//TODO: not sure about this case, maybe should pass along
-					}
-				}
-				else if (msg.getMsgType().equals("commit") || msg.getMsgType().equals("abort")) {
-					// Check in TPCLog for the case when SlaveServer is restarted
-					// Implement me
-					if(tpcLog.hasInterruptedTpcOperation())
-						originalMessage = tpcLog.getInterruptedTpcOperation();
-					
-					handleMasterResponse(msg, originalMessage, aborted);
-					
-					// Reset state
-					// Implement me
-					originalMessage = null;
-					aborted = true;
-				}
-			} catch (Exception e) {
-				// ignore
-			}
+				msg = new KVMessage(client.getInputStream());
+			}catch(KVException e){System.out.println("exceptionKV");
+			}catch(IOException e){System.out.println("exceptionIO");}
+			// Parse the message and do stuff 
+			String key = msg.getKey();
+
 			
+			if (msg.getMsgType().equals("putreq")) {
+				handlePut(msg, key);
+			}
+			else if (msg.getMsgType().equals("getreq")) {
+				handleGet(msg, key);
+			}
+			else if (msg.getMsgType().equals("delreq")) {
+				handleDel(msg, key);
+			} 
+			else if (msg.getMsgType().equals("ignoreNext")) {
+				// Set ignoreNext to true. PUT and DEL handlers know what to do.
+				// Implement me
+				// Send back an acknowledgment
+				// Implement me
+				ignoreNext = true;
+				try {
+					KVMessage ackMsg = new KVMessage("ack");
+					ackMsg.setTpcOpId(msg.getTpcOpId());
+					ackMsg.sendMessage(client);
+				} catch(KVException e) {
+					//TODO: not sure about this case, maybe should pass along
+				}
+			}
+			else if (msg.getMsgType().equals("commit") || msg.getMsgType().equals("abort")) {
+				// Check in TPCLog for the case when SlaveServer is restarted
+				// Implement me
+				if(tpcLog.hasInterruptedTpcOperation())
+					originalMessage = tpcLog.getInterruptedTpcOperation();
+				
+				handleMasterResponse(msg, originalMessage, aborted);
+
+				
+				// Reset state
+				// Implement me
+				originalMessage = null;
+				aborted = true;
+			}
 			// Finally, close the connection
 			closeConn();
 		}
 
 		private void handlePut(KVMessage msg, String key) {
 			AutoGrader.agTPCPutStarted(slaveID, msg, key);
+			System.out.println("hi");
 			//write to log and set message
 			tpcLog.appendAndFlush(msg); //TODO: check if already written to log
 			// Store for use in the second phase
 			originalMessage = new KVMessage(msg);
-			
 			//check for failure
 			if(ignoreNext == true) {
 				try{
