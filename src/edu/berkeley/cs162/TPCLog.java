@@ -30,6 +30,7 @@
 package edu.berkeley.cs162;
 
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -60,14 +61,8 @@ public class TPCLog {
 	}
 
     //Helper Methods
-	public ArrayList<KVMessage> getEntries() {
-		return entries;
-	}
-
-	public boolean empty() {
-		return (entries.size() == 0);
-	}
-
+	public ArrayList<KVMessage> getEntries() { return entries; }
+	public boolean empty() { return (entries.size() == 0); }
     public void setInterruptedTpcOperation(KVMessage kvm) {
         String type = kvm.getMsgType();
         if (type.equals("putreq") || type.equals("delreq"))
@@ -77,7 +72,7 @@ public class TPCLog {
     //Action Methods
 	public void appendAndFlush(KVMessage entry) {
         String msgType = entry.getMsgType();
-        if (msgType.equals("getreq") || msgType.equals("putreq") ||
+        if (msgType.equals("putreq") || msgType.equals("delreq") ||
             msgType.equals("abort") || msgType.equals("commit")) {
             loadFromDisk();
             entries.add(entry);
@@ -93,8 +88,10 @@ public class TPCLog {
 		ObjectInputStream inputStream = null;
 		
 		try {
-			inputStream = new ObjectInputStream(new FileInputStream(logPath));			
+			inputStream = new ObjectInputStream(new FileInputStream(logPath));
 			entries = (ArrayList<KVMessage>) inputStream.readObject();
+		} catch (FileNotFoundException e) {
+			//print nothing
 		} catch (Exception e) {
 			e.printStackTrace();
 		} finally {
@@ -143,9 +140,6 @@ public class TPCLog {
 	 * @throws KVException
 	 */
 	public void rebuildKeyServer() throws KVException {
-		if (entries == null)
-			return;
-		
         KVMessage request = null;
         KVMessage response = null;
         String reqType = null;

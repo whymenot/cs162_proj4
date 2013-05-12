@@ -79,6 +79,7 @@ public class KVStore implements KeyValueInterface {
 	private void getDelay() { AutoGrader.agStoreDelay(); }
 	private void putDelay() { AutoGrader.agStoreDelay(); }
 	private void delDelay() { AutoGrader.agStoreDelay(); }
+	public Dictionary getStore() { return this.store; }
 	
     //Action Methods
 	public void put(String key, String value) throws KVException {
