@@ -338,7 +338,6 @@ public class TPCMaster {
 			}
 		}
 		
-		System.out.println("Response is : " + response);
 		return response;
 	}
 	
@@ -427,12 +426,12 @@ public class TPCMaster {
 						// retry...
 					}
 				}
-				
-				if (response.getMsgType().equals("commit")) {
+				if (response.getMsgType().equals("ack")) {
 					if (isPutReq)
 						masterCache.put(key, msg.getValue());
-					else
+					else {
 						masterCache.del(key);
+					}
 				}
 			}
 		} catch (KVException e) {
@@ -520,8 +519,6 @@ public class TPCMaster {
 				String error1 = null;
 				String error2 = null;
 				response = this.communicateToSlave(first, request);
-				System.out.println("Request : " + request.toXML());
-				System.out.println("Response : " + response);
 				if (response.getMsgType().equals("resp") &&
 						response.getKey() != null && response.getKey().equals(key) &&
 						response.getValue() != null) {
