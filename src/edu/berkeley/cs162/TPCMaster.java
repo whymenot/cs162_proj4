@@ -39,6 +39,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.Map.Entry;
 import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
 public class TPCMaster {
@@ -201,6 +202,8 @@ public class TPCMaster {
 	public TPCMaster(int numSlaves) {
 		// Using SlaveInfos from command line just to get the expected number of SlaveServers 
 		this.numSlaves = numSlaves;
+		this.slaveServers = new TreeMap<Long, SlaveInfo>();
+		this.getLock = new ReentrantLock();
 
 		// Create registration server
 		regServer = new SocketServer("localhost", 9090);
@@ -223,6 +226,7 @@ public class TPCMaster {
 	public void run() {
 		AutoGrader.agTPCMasterStarted();
 		// implement me
+		regServer.addHandler(new TPCRegistrationHandler());
 		Thread thread = new Thread(new Runnable() {
 			@Override
 			public void run(){
@@ -230,6 +234,7 @@ public class TPCMaster {
 					regServer.connect();
 					regServer.run();
 				} catch (IOException e) {
+					e.printStackTrace();
 					// do nothing
 				}
 			}
@@ -310,6 +315,7 @@ public class TPCMaster {
 	public KVMessage communicateToSlave(SlaveInfo si, KVMessage msg) throws KVException {
 		KVMessage response = null;
 		Socket socket = null;
+		
 		try {
 			socket = si.connectHost();
 			msg.sendMessage(socket, TIMEOUT_MILLISECONDS);
@@ -372,7 +378,6 @@ public class TPCMaster {
 		try {
 			// first phase
 			response = this.communicateToSlave(first, request);
-
 			if (response.getMsgType().equals("abort")) {
 				throw new KVException(new KVMessage("resp", "first server aborted"));
 			}
@@ -424,6 +429,7 @@ public class TPCMaster {
 			}
 		} catch (KVException e) {
 			request = new KVMessage("abort");
+			request.setTpcOpId(nextTpcOpId);
 			boolean firstReceived = false;
 			boolean secondReceived = false;
 			while (true) {
@@ -503,7 +509,8 @@ public class TPCMaster {
 				String error1 = null;
 				String error2 = null;
 				response = this.communicateToSlave(first, request);
-				
+				System.out.println("Request : " + request.toXML());
+				System.out.println("Response : " + response);
 				if (response.getMsgType().equals("resp") &&
 						response.getKey() != null && response.getKey().equals(key) &&
 						response.getValue() != null) {

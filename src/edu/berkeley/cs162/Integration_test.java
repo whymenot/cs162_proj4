@@ -8,53 +8,21 @@ import java.net.ServerSocket;
 import java.net.Socket;
 
 import static org.junit.Assert.*;
+
+import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class Integration_test {
-	@Test
-	public void put() {
-		Thread client = new Thread() {
-			public void run() {
-				InetAddress server = null;
-				int port = 8080;
-				Socket socket = null;
-
-				try {
-					server = InetAddress.getLocalHost();
-					socket = new Socket(server, port);
-
-					KVMessage request = null;
-					KVMessage response = null;
-					InputStream is = null;
-
-					request = new KVMessage("putreq");
-					request.setKey("sampleKey");
-					request.setValue("sampleValue");
-					request.sendMessage(socket);
-
-					is = socket.getInputStream();
-					response = new KVMessage(is);
-					assertTrue(response.getMsgType().equals("resp")
-							&& response.getMessage().equals("Success"));
-
-					socket.close();
-				}
-				catch (KVException e) {
-					System.out.println(e.getMsg().getMessage());
-				}
-				catch (Exception e) {
-					e.printStackTrace();
-				}
-				finally {
-					try {
-						socket.close();
-					}
-					catch (IOException e) {
-
-					}
-				}
-			}
-		};
+	static boolean serversOn = false;
+	@Before
+	public void A_runServers() {
+		System.out.println("Servers are ? : " + serversOn);
+		if (serversOn) return;
+		System.out.println("I am running the next lines...");
+		serversOn = true;
+		
+		final int server_port = 8080;
 		
 		Thread TPCserver = new Thread() {
 			public void run() {
@@ -68,7 +36,7 @@ public class Integration_test {
 					
 					// Create KVClientHandler
 					System.out.println("Binding Master(TPCMaster):");
-					server = new SocketServer(InetAddress.getLocalHost().getHostAddress(), 8080);
+					server = new SocketServer(InetAddress.getLocalHost().getHostAddress(), server_port);
 					NetworkHandler handler = new KVClientHandler(tpcMaster);
 					server.addHandler(handler);
 					server.connect();
@@ -168,19 +136,176 @@ public class Integration_test {
 			}
 		};
 
-		TPCserver.start(); // coordination server
-		slave1.start();
-		slave2.start();
-		client.start();
+		TPCserver.setName("TPCServer");
+		slave1.setName("Slave1");
+		slave2.setName("Slave2");
+		
+		try {
+			TPCserver.start(); // coordination server
+			Thread.sleep(2000);
+			slave1.start();
+			slave2.start();
+			Thread.sleep(2000);
+			System.out.println("Servers are started...");
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+	
+	@Test
+	public void put() {
+		final int server_port = 8080;
+		Thread client = new Thread() {
+			public void run() {
+				InetAddress server = null;
+				int port = server_port;
+				Socket socket = null;
+
+				try {
+					server = InetAddress.getLocalHost();
+					socket = new Socket(server, port);
+
+					KVMessage request = null;
+					KVMessage response = null;
+					InputStream is = null;
+
+					request = new KVMessage("putreq");
+					request.setKey("sampleKey");
+					request.setValue("sampleValue");
+					request.sendMessage(socket);
+					
+					System.out.println("client. " + request.toXML());
+
+					is = socket.getInputStream();
+					System.out.println("client. after is");
+					response = new KVMessage(is);
+					System.out.println("Message: "+response.getMessage());
+					System.out.println("client. after response");
+					System.out.println(response.toXML());
+					assertTrue(response.getMsgType().equals("resp")
+							&& response.getMessage().equals("Success"));
+
+					socket.close();
+				}
+				catch (KVException e) {
+					System.out.println("CLIENT ERROR OCCURED");
+					System.out.println(e.getMsg().getMessage());
+				}
+				catch (Exception e) {
+					e.printStackTrace();
+				}
+				finally {
+					try {
+						socket.close();
+					}
+					catch (IOException e) {
+
+					}
+				}
+			}
+		};
+
+		try {
+			client.start();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		try {
+			client.join();
+			System.out.println("--- test succeeded!!!");
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+	
+	@Test
+	public void putAndGet() {
+		final int server_port = 8080;
+		Thread client = new Thread() {
+			public void run() {
+				InetAddress server = null;
+				int port = server_port;
+				Socket socket = null;
+
+				try {
+					server = InetAddress.getLocalHost();
+					socket = new Socket(server, port);
+
+					KVMessage request = null;
+					KVMessage response = null;
+					InputStream is = null;
+
+					request = new KVMessage("putreq");
+					request.setKey("sampleKey");
+					request.setValue("sampleValue");
+					request.sendMessage(socket);
+					
+					System.out.println("client. " + request.toXML());
+
+					is = socket.getInputStream();
+					System.out.println("client. after is");
+					response = new KVMessage(is);
+					System.out.println("Message: "+response.getMessage());
+					System.out.println("client. after response");
+					System.out.println(response.toXML());
+					assertTrue(response.getMsgType().equals("resp")
+							&& response.getMessage().equals("Success"));
+
+					
+					request = new KVMessage("getreq");
+					request.setKey("sampleKey");
+					System.out.println("socket status : " + !socket.isClosed());
+					socket = new Socket(server, port);
+					request.sendMessage(socket);
+					
+					System.out.println("client. " + request.toXML());
+					
+					is = socket.getInputStream();
+					response = new KVMessage(is);
+					System.out.println("Message: "+response.getMessage());
+					System.out.println("client. after response");
+					System.out.println(response.toXML());
+					assertTrue(response.getMsgType().equals("resp")
+							&& response.getKey().equals("sampleKey")
+							&& response.getValue().equals("sampleValue"));
+					
+
+					socket.close();
+				}
+				catch (KVException e) {
+					System.out.println("CLIENT ERROR OCCURED");
+					System.out.println(e.getMsg().getMessage());
+				}
+				catch (Exception e) {
+					e.printStackTrace();
+				}
+				finally {
+					try {
+						socket.close();
+					}
+					catch (IOException e) {
+
+					}
+				}
+			}
+		};
+
+		client.setName("Client");
+		
+		try {
+			client.start();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
 
 		try {
 			// i have 1 client,
 			// 1 TPCMaster
 			// 2 Slaves.
-			TPCserver.join();
-			slave1.join();
-			slave2.join();
 			client.join();
+			System.out.println("--- test succeeded!!!");
 		}
 		catch (Exception e) {
 			e.printStackTrace();
