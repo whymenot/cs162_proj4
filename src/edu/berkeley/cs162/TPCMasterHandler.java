@@ -86,7 +86,6 @@ public class TPCMasterHandler implements NetworkHandler {
 		public void run() {
 			// Receive message from client
 			// Implement me
-			System.out.println("hi");
 			KVMessage msg =null;
 			try{
 				msg = new KVMessage(client.getInputStream());
@@ -139,7 +138,6 @@ public class TPCMasterHandler implements NetworkHandler {
 
 		private void handlePut(KVMessage msg, String key) {
 			AutoGrader.agTPCPutStarted(slaveID, msg, key);
-			System.out.println("hi");
 			//write to log and set message
 			tpcLog.appendAndFlush(msg); //TODO: check if already written to log
 			// Store for use in the second phase
@@ -195,6 +193,7 @@ public class TPCMasterHandler implements NetworkHandler {
  			}
  			else if (!kvServer.hasKey(key)) {
  				try {
+ 					System.out.println("GET REQ DOES NOT EXIST");
 	 				KVMessage respMsg = new KVMessage("resp", "Does not exist");
 	 				respMsg.sendMessage(client);
  				} catch(KVException e) {
@@ -203,6 +202,7 @@ public class TPCMasterHandler implements NetworkHandler {
  			}
  			else {
  				try {
+ 					System.out.println("GET REQ EXISTS");
 	 				KVMessage respMsg = new KVMessage("resp");
 	 				respMsg.setKey(key);
 	 				respMsg.setValue(kvServer.get(key));
@@ -265,6 +265,7 @@ public class TPCMasterHandler implements NetworkHandler {
 			else {
 				try {
 					aborted = false;
+					System.out.println("VOTE-COMMIT ON DEL");
 					KVMessage readyMsg = new KVMessage("ready");
 					readyMsg.setTpcOpId( msg.getTpcOpId() );
 					tpcLog.appendAndFlush(readyMsg);
@@ -299,7 +300,10 @@ public class TPCMasterHandler implements NetworkHandler {
 						if(origMsg.getMsgType().equals("delreq")) {
 							String key = origMsg.getKey();
 							try{
+								System.out.println("HAS KEY -" +kvServer.hasKey(key));
+								System.out.println("DEL HANDLE MASTER RESP -");
 								kvServer.del(key);
+								System.out.println("HAS KEY -" +kvServer.hasKey(key));
 							}catch(KVException e){
 							}
 						} else if(origMsg.getMsgType().equals("putreq")){

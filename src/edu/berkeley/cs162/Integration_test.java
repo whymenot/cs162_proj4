@@ -460,6 +460,112 @@ public class Integration_test {
 			e.printStackTrace();
 		}
 	}
+	
+	@Test
+	public void putAndDel() {
+		final int server_port = 8080;
+		Thread client = new Thread() {
+			public void run() {
+				InetAddress server = null;
+				int port = server_port;
+				Socket socket = null;
+
+				try {
+					server = InetAddress.getLocalHost();
+					socket = new Socket(server, port);
+
+					KVMessage request = null;
+					KVMessage response = null;
+					InputStream is = null;
+
+					request = new KVMessage("putreq");
+					request.setKey("sampleKey");
+					request.setValue("sampleValue");
+					request.sendMessage(socket);
+					
+					System.out.println("client. " + request.toXML());
+
+					is = socket.getInputStream();
+					System.out.println("client. after is");
+					response = new KVMessage(is);
+					System.out.println("Message: "+response.getMessage());
+					System.out.println("client. after response");
+					System.out.println(response.toXML());
+					assertTrue(response.getMsgType().equals("resp")
+							&& response.getMessage().equals("Success"));
+
+					
+					request = new KVMessage("delreq");
+					request.setKey("sampleKey");
+					System.out.println("socket status : " + !socket.isClosed());
+					socket = new Socket(server, port);
+					request.sendMessage(socket);
+					
+					System.out.println("client. " + request.toXML());
+					
+					is = socket.getInputStream();
+					response = new KVMessage(is);
+					System.out.println("Message: "+response.getMessage());
+					System.out.println("client. after response");
+					System.out.println(response.toXML());
+					assertTrue(response.getMsgType().equals("resp")&& response.getMessage().equals("Success"));
+					
+					request = new KVMessage("getreq");
+					socket = new Socket(server, port);
+					request.setKey("sampleKey");
+					request.sendMessage(socket);
+					
+					System.out.println("client. " + request.toXML());
+
+					is = socket.getInputStream();
+					System.out.println("client. after is");
+					response = new KVMessage(is);
+					System.out.println("Message: "+response.getMessage());
+					System.out.println("client. after response");
+					System.out.println(response.toXML());
+					assertTrue(response.getMsgType().equals("resp")
+							&& response.getMessage().split("\n")[0].equals("@10000:=Does not exist"));
+
+
+					socket.close();
+				}
+				catch (KVException e) {
+					System.out.println("CLIENT ERROR OCCURED");
+					System.out.println(e.getMsg().getMessage());
+				}
+				catch (Exception e) {
+					e.printStackTrace();
+				}
+				finally {
+					try {
+						socket.close();
+					}
+					catch (IOException e) {
+
+					}
+				}
+			}
+		};
+
+		client.setName("Client");
+		
+		try {
+			client.start();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		try {
+			// i have 1 client,
+			// 1 TPCMaster
+			// 2 Slaves.
+			client.join();
+			System.out.println("--- test succeeded!!!");
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
 	/*
 	@Test
 	public void putTimeOut() {
