@@ -58,6 +58,10 @@ public class KVServer implements KeyValueInterface {
 		AutoGrader.registerKVServer(dataStore, dataCache);
 	}
 	
+	//Helper Methods
+	public KVStore getKVStore() { return this.dataStore; }
+	public KVCache getKVCache() { return this.dataCache; }
+	
 	//Action Methods
 	public void put(String key, String value) throws KVException {
 		// Must be called before anything else
