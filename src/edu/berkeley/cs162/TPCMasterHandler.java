@@ -34,6 +34,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.HashSet;
 
 /**
  * Implements NetworkHandler to handle 2PC operation requests from the Master/
@@ -73,7 +74,7 @@ public class TPCMasterHandler implements NetworkHandler {
 	private class ClientHandler implements Runnable {
 		private KVServer keyserver = null;
 		private Socket client = null;
-		
+		private HashSet<String> opIds =new HashSet<String>();
 		private void closeConn() {
 			try {
 				client.close();
@@ -85,13 +86,12 @@ public class TPCMasterHandler implements NetworkHandler {
 		public void run() {
 			// Receive message from client
 			// Implement me
+			System.out.println("hi");
 			KVMessage msg =null;
-
 			try{
-				
 				msg = new KVMessage(client.getInputStream());
-			}catch(KVException e){System.out.println("exceptionKV");
-			}catch(IOException e){System.out.println("exceptionIO");}
+			}catch(KVException e){
+			}catch(IOException e){}
 			// Parse the message and do stuff 
 			String key = msg.getKey();
 
@@ -289,29 +289,34 @@ public class TPCMasterHandler implements NetworkHandler {
 			AutoGrader.agSecondPhaseStarted(slaveID, origMsg, origAborted);
 			//need to not handle same request twice by checking if an ack was sent
 			// Implement me
-			tpcLog.appendAndFlush(masterResp); 
-			if(!origAborted) {
-				if(masterResp.getMsgType().equals("commit")) {
-					if(origMsg.getMsgType().equals("delreq")) {
-						String key = origMsg.getKey();
-						try{
-							kvServer.del(key);
-						}catch(KVException e){
-							
-						}
-					} else if(origMsg.getMsgType().equals("putreq")){
-						String key = origMsg.getKey();
-						String value = origMsg.getValue();
+			String currTcpOpId = masterResp.getTpcOpId();
+			if (opIds.contains(currTcpOpId)){
+				opIds.add(currTcpOpId);
+				tpcLog.appendAndFlush(masterResp); 
+			
+				if(!origAborted) {
+					if(masterResp.getMsgType().equals("commit")) {
+						if(origMsg.getMsgType().equals("delreq")) {
+							String key = origMsg.getKey();
+							try{
+								kvServer.del(key);
+							}catch(KVException e){
+							}
+						} else if(origMsg.getMsgType().equals("putreq")){
+							String key = origMsg.getKey();
+							String value = origMsg.getValue();
 						
-						try{
-							kvServer.put(key, value);
-						}catch(KVException e){
-							
-						}
-					} else {
+							try{
+								kvServer.put(key, value);
+							}catch(KVException e){
+						
+							}
+						} else {
 						//ignore
+						}
 					}
 				}
+
 			}
 			try {
 				KVMessage ackMsg = new KVMessage("ack");
@@ -320,7 +325,6 @@ public class TPCMasterHandler implements NetworkHandler {
 			} catch(KVException e) {
 				//TODO: figure out what to do with these exceptions
 			}
-			
 			AutoGrader.agSecondPhaseFinished(slaveID, origMsg, origAborted);
 		}
 
