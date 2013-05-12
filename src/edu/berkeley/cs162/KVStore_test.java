@@ -2,6 +2,8 @@ package edu.berkeley.cs162;
 
 import static org.junit.Assert.*;
 
+import java.io.File;
+
 import org.junit.Test;
 
 public class KVStore_test {
@@ -27,6 +29,9 @@ public class KVStore_test {
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
+		} finally {
+			File file = new File("test1.xml");
+			file.delete();
 		}
 		realXML = store2.toXML();
 		assertTrue(expectedXML.compareTo(realXML)==0);
