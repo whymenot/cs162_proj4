@@ -39,6 +39,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.Map.Entry;
 import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
 public class TPCMaster {
@@ -202,6 +203,7 @@ public class TPCMaster {
 		// Using SlaveInfos from command line just to get the expected number of SlaveServers 
 		this.numSlaves = numSlaves;
 		this.slaveServers = new TreeMap<Long, SlaveInfo>();
+		this.getLock = new ReentrantLock();
 
 		// Create registration server
 		regServer = new SocketServer("localhost", 9090);
@@ -507,7 +509,8 @@ public class TPCMaster {
 				String error1 = null;
 				String error2 = null;
 				response = this.communicateToSlave(first, request);
-				
+				System.out.println("Request : " + request.toXML());
+				System.out.println("Response : " + response);
 				if (response.getMsgType().equals("resp") &&
 						response.getKey() != null && response.getKey().equals(key) &&
 						response.getValue() != null) {
