@@ -290,7 +290,7 @@ public class TPCMasterHandler implements NetworkHandler {
 			//need to not handle same request twice by checking if an ack was sent
 			// Implement me
 			String currTcpOpId = masterResp.getTpcOpId();
-			if (opIds.contains(currTcpOpId)){
+			if (!opIds.contains(currTcpOpId)){
 				opIds.add(currTcpOpId);
 				tpcLog.appendAndFlush(masterResp); 
 			
