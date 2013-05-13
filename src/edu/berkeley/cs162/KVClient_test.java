@@ -110,6 +110,10 @@ public final class KVClient_test {
 		};
 		
 		server.start();
+		try {
+			Thread.sleep(2000);
+		}
+		catch (Exception e) {}
 		client.start();
 		
 		try {
@@ -211,6 +215,10 @@ public final class KVClient_test {
 		};
 		
 		server.start();
+		try {
+			Thread.sleep(2000);
+		}
+		catch (Exception e) {}
 		client.start();
 		
 		try {
